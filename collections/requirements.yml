@@ -1,0 +1,4 @@
+---
+# AWX proje senkronizasyonunda kurulur.
+collections:
+  - name: ansible.posix   # nginx rolü: firewalld
