@@ -1,0 +1,9 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
+splunk_home: /opt/splunkforwarder
+splunk_unit: SplunkForwarder
+splunk_effective_client_name: "{{ splunk_client_name or inventory_hostname }}"

@@ -1,0 +1,128 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+- name: Bağlanacak bir yer verildi
+  ansible.builtin.assert:
+    that: splunk_deployment_server | length > 0 or splunk_forward_servers | length > 0
+    fail_msg: splunk_deployment_server ya da splunk_forward_servers verilmeli.
+    quiet: true
+
+- name: Kurulu paketler
+  ansible.builtin.package_facts:
+
+- name: Paket imza anahtarı
+  ansible.builtin.rpm_key:
+    key: "{{ splunk_gpg_key }}"
+    state: present
+  when:
+    - splunk_package_name not in ansible_facts.packages
+    - splunk_package_url | length > 0
+    - splunk_gpg_check | bool
+    - splunk_gpg_key | length > 0
+
+# Kuruluysa rpm her run'da yeniden indirilmez.
+- name: Splunk Universal Forwarder
+  ansible.builtin.dnf:
+    name: "{{ splunk_package_url or splunk_package_name }}"
+    state: present
+    disable_gpg_check: "{{ not splunk_gpg_check | bool }}"
+  register: splunk_package
+  when: splunk_package_name not in ansible_facts.packages
+
+- name: systemd servisi
+  ansible.builtin.stat:
+    path: /etc/systemd/system/{{ splunk_unit }}.service
+  register: splunk_unit_file
+
+# Check mode'da paket henüz kurulmadıysa dizin, kullanıcı ve komut yoktur.
+- name: Forwarder ayarları ve servis
+  when: not (ansible_check_mode and splunk_package is changed)
+  block:
+    # Splunk ilk açılışta okuyup siler; sonraki run'larda yazılmaz.
+    - name: Yerel admin (ilk kurulum)
+      ansible.builtin.copy:
+        content: |
+          [user_info]
+          USERNAME = admin
+          PASSWORD = {{ splunk_admin_password }}
+        dest: "{{ splunk_home }}/etc/system/local/user-seed.conf"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_user }}"
+        mode: "0600"
+      no_log: true
+      when:
+        - splunk_admin_password | length > 0
+        - not splunk_unit_file.stat.exists
+
+    - name: Açılışta başlasın (systemd servisi ve lisans kabulü)
+      ansible.builtin.command:
+        argv:
+          - "{{ splunk_home }}/bin/splunk"
+          - enable
+          - boot-start
+          - -systemd-managed
+          - "1"
+          - -user
+          - "{{ splunk_user }}"
+          - -group
+          - "{{ splunk_user }}"
+          - --accept-license
+          - --answer-yes
+          - --no-prompt
+        creates: /etc/systemd/system/{{ splunk_unit }}.service
+
+    - name: Deployment server
+      ansible.builtin.template:
+        src: deploymentclient.conf.j2
+        dest: "{{ splunk_home }}/etc/system/local/deploymentclient.conf"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_user }}"
+        mode: "0600"
+      register: splunk_ds_conf
+      when: splunk_deployment_server | length > 0
+
+    - name: Deployment server yok
+      ansible.builtin.file:
+        path: "{{ splunk_home }}/etc/system/local/deploymentclient.conf"
+        state: absent
+      register: splunk_ds_removed
+      when: splunk_deployment_server | length == 0
+
+    - name: Indexer'lar
+      ansible.builtin.template:
+        src: outputs.conf.j2
+        dest: "{{ splunk_home }}/etc/system/local/outputs.conf"
+        owner: "{{ splunk_user }}"
+        group: "{{ splunk_user }}"
+        mode: "0600"
+      register: splunk_outputs_conf
+      when: splunk_forward_servers | length > 0
+
+    - name: Indexer listesi yok
+      ansible.builtin.file:
+        path: "{{ splunk_home }}/etc/system/local/outputs.conf"
+        state: absent
+      register: splunk_outputs_removed
+      when: splunk_forward_servers | length == 0
+
+    - name: Forwarder açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: "{{ splunk_unit }}"
+        enabled: true
+        state: started
+      register: splunk_started
+
+    - name: Forwarder yeni ayarla yeniden başlasın
+      ansible.builtin.systemd_service:
+        name: "{{ splunk_unit }}"
+        state: restarted
+      when:
+        - splunk_ds_conf is changed or splunk_ds_removed is changed
+          or splunk_outputs_conf is changed or splunk_outputs_removed is changed
+        - splunk_started is not changed

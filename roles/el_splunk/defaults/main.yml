@@ -1,0 +1,10 @@
+---
+splunk_package_url: ""
+splunk_package_name: splunkforwarder
+splunk_gpg_key: https://docs.splunk.com/images/6/6b/SplunkPGPKey.pub
+splunk_gpg_check: true
+splunk_deployment_server: ""
+splunk_forward_servers: []
+splunk_client_name: ""
+splunk_admin_password: ""
+splunk_user: splunkfwd

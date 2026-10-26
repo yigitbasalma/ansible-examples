@@ -1,0 +1,10 @@
+KLNAGENT_AUTOINSTALL=1
+EULA_ACCEPTED=1
+KLNAGENT_SERVER={{ kaspersky_ksc_server }}
+KLNAGENT_PORT={{ kaspersky_ksc_port }}
+KLNAGENT_SSLPORT={{ kaspersky_ksc_ssl_port }}
+KLNAGENT_USESSL={{ '1' if kaspersky_ksc_use_ssl | bool else '0' }}
+KLNAGENT_GW_MODE=2
+{% if kaspersky_tags %}
+KLNAGENT_TAGS={{ kaspersky_tags | join(';') }}
+{% endif %}

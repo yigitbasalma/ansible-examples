@@ -1,0 +1,7 @@
+# Gaia'nın yazdığı deployment server bağlantısı ({{ gaia_contract }});
+# elle değiştirilirse bir sonraki run geri alır.
+[deployment-client]
+clientName = {{ splunk_effective_client_name }}
+
+[target-broker:deploymentServer]
+targetUri = {{ splunk_deployment_server }}

@@ -1,0 +1,8 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
+klnagent_bin: /opt/kaspersky/klnagent64/bin
+kesl_bin: /opt/kaspersky/kesl/bin

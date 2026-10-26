@@ -1,0 +1,63 @@
+---
+argument_specs:
+  main:
+    short_description: Kaspersky Network Agent'ı kurup KSC'ye bağlar, Endpoint Security for Linux'u (KESL) kurar
+    description:
+      - Network Agent (klnagent64) Kaspersky Security Center'a (KSC) bağlanır; KSC adresi değişirse ajan taşınır.
+      - KESL kurulur ve güncellemelerini KSC'den alacak şekilde yapılandırılır; politika ve lisans KSC'den gelir.
+      - Paketler *_package_url'den (ör. Nexus) ya da sunucuda tanımlı bir repodan kurulur. Kurulu paketler yükseltilmez.
+      - Rolü çalıştırmak Kaspersky'nin lisans sözleşmesini ve gizlilik politikasını kabul etmek demektir.
+    options:
+      kaspersky_ksc_server:
+        type: str
+        default: ""
+        description: Kaspersky Security Center (Administration Server) adresi; zorunlu.
+      kaspersky_ksc_port:
+        type: int
+        default: 14000
+        description: KSC'nin şifresiz portu.
+      kaspersky_ksc_ssl_port:
+        type: int
+        default: 13000
+        description: KSC'nin TLS portu.
+      kaspersky_ksc_use_ssl:
+        type: bool
+        default: true
+        description: Ajan KSC'ye TLS ile bağlansın.
+      kaspersky_tags:
+        type: list
+        elements: str
+        default: []
+        description: Ajana KSC'de atanacak etiketler (KSC'de otomatik gruplama kuralları için). Yalnızca ilk kurulumda uygulanır.
+      kaspersky_nagent_package_url:
+        type: str
+        default: ""
+        description: Network Agent rpm'inin adresi. Boşsa kaspersky_nagent_package_name repolardan kurulur.
+      kaspersky_nagent_package_name:
+        type: str
+        default: klnagent64
+        description: Network Agent paket adı.
+      kaspersky_kesl_package_url:
+        type: str
+        default: ""
+        description: KESL rpm'inin adresi. Boşsa kaspersky_kesl_package_name repolardan kurulur.
+      kaspersky_kesl_package_name:
+        type: str
+        default: kesl
+        description: KESL paket adı.
+      kaspersky_gpg_key:
+        type: str
+        default: ""
+        description: >-
+          rpm imza anahtarı (adres ya da sunucudaki dosya); paketler *_package_url ile kurulmadan önce içe aktarılır.
+          Kaspersky'nin anahtarı verilmeli ya da önceden sunucuda olmalı.
+      kaspersky_gpg_check:
+        type: bool
+        default: true
+        description: >-
+          false ise *_package_url ile kurulan paketlerin imzası doğrulanmaz. Yalnızca imzasız paket kullanılan
+          ortamlarda kapatılır.
+      kaspersky_use_ksn:
+        type: bool
+        default: false
+        description: Kaspersky Security Network'e katılım (sunucudan Kaspersky'ye veri gönderilir).

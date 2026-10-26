@@ -2,3 +2,4 @@
 # AWX proje senkronizasyonunda kurulur.
 collections:
   - name: ansible.posix   # nginx rolü: firewalld; el_hardening: mount
+  - name: community.proxmox   # inventories/proxmox: dinamik inventory

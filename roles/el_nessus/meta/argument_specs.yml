@@ -1,0 +1,52 @@
+---
+argument_specs:
+  main:
+    short_description: Tenable Nessus Agent'ı kurar ve yönetim sunucusuna bağlar (link)
+    description:
+      - Paket nessus_package_url'den (ör. Nexus) ya da sunucuda tanımlı bir repodan kurulur. Kurulu paket yükseltilmez.
+      - Ajan başka bir yönetim sunucusuna bağlıysa bağ koparılıp verilen sunucuya bağlanır.
+    options:
+      nessus_package_url:
+        type: str
+        default: ""
+        description: Nessus Agent rpm'inin adresi. Boşsa nessus_package_name sunucudaki repolardan kurulur.
+      nessus_package_name:
+        type: str
+        default: NessusAgent
+        description: Paket adı (repodan kurulurken ve kurulu olup olmadığına bakarken).
+      nessus_gpg_key:
+        type: str
+        default: "https://www.tenable.com/downloads/api/v2/pages/nessus-agents/files/tenable-4096.gpg"
+        description: >-
+          rpm imza anahtarı (adres ya da sunucudaki dosya); nessus_package_url ile kurulumdan önce
+          içe aktarılır. Varsayılan üreticinin anahtarıdır.
+      nessus_gpg_check:
+        type: bool
+        default: true
+        description: >-
+          false ise nessus_package_url ile kurulan paketin imzası doğrulanmaz. Yalnızca imzasız paket kullanılan
+          ortamlarda kapatılır.
+      nessus_manager_host:
+        type: str
+        default: ""
+        description: >-
+          Ajanın bağlanacağı yönetim sunucusu (Nessus Manager ya da Tenable Vulnerability Management için
+          sensor.cloud.tenable.com); zorunlu.
+      nessus_manager_port:
+        type: int
+        default: 8834
+        description: Yönetim sunucusunun portu (Nessus Manager 8834, Tenable Vulnerability Management 443).
+      nessus_linking_key:
+        type: str
+        default: ""
+        no_log: true
+        description: Yönetim sunucusundaki linking key; zorunlu ve gizli tutulmalı.
+      nessus_agent_name:
+        type: str
+        default: ""
+        description: Yönetim sunucusunda görünen ajan adı. Boşsa inventory'deki ad.
+      nessus_agent_groups:
+        type: list
+        elements: str
+        default: []
+        description: Ajanın ekleneceği ajan grupları (yönetim sunucusunda var olmalı). Yalnızca bağlanırken uygulanır.

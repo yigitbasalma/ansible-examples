@@ -1,0 +1,13 @@
+---
+kaspersky_ksc_server: ""
+kaspersky_ksc_port: 14000
+kaspersky_ksc_ssl_port: 13000
+kaspersky_ksc_use_ssl: true
+kaspersky_tags: []
+kaspersky_nagent_package_url: ""
+kaspersky_nagent_package_name: klnagent64
+kaspersky_kesl_package_url: ""
+kaspersky_kesl_package_name: kesl
+kaspersky_gpg_key: ""
+kaspersky_gpg_check: true
+kaspersky_use_ksn: false

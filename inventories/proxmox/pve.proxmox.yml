@@ -1,0 +1,68 @@
+---
+# Proxmox VE kümesindeki VM (qemu) ve container'ları (lxc) dinamik inventory
+# olarak çeker. Dosya adı ".proxmox.yml" ile bitmeli, yoksa eklenti dosyayı
+# tanımaz.
+#
+# AWX'te: Inventories > Add inventory > Sources > Add
+#   Source:          Sourced from a Project
+#   Project:         bu repo
+#   Inventory file:  inventories/proxmox/pve.proxmox.yml
+#   Credential:      "Proxmox API" tipinde credential (credential_type.yml)
+#   Overwrite + Update on launch işaretli: silinen VM'ler inventory'den düşer,
+#   job her çalıştığında liste tazelenir.
+#
+# Bağlantı bilgileri (URL, kullanıcı, token) dosyada değil; AWX credential'ı
+# PROXMOX_URL, PROXMOX_USER, PROXMOX_TOKEN_ID ve PROXMOX_TOKEN_SECRET ortam
+# değişkenleriyle verir. Elle denemek için aynı değişkenleri export edip:
+#   ansible-inventory -i inventories/proxmox/pve.proxmox.yml --graph
+plugin: community.proxmox.proxmox
+
+# Proxmox self-signed sertifika kullanıyorsa CA'yı credential'ın "CA
+# certificate" alanına koyun; doğrulamayı kapatmayın.
+validate_certs: true
+
+# Hypervisor node'ları hedef değil, sadece misafirler.
+exclude_nodes: true
+
+# Config, durum, etiketler ve guest agent IP'leri için gerekli. VM başına
+# birkaç API çağrısı yapar; büyük kümelerde senkronizasyon uzar.
+want_facts: true
+
+# Şablonlar (template) çalıştırılabilir host değil.
+filters:
+  - not proxmox_template
+
+# Varsayılan olarak Ansible host'a VM adıyla bağlanır; DNS'te kayıt yoksa
+# bu tutmaz. Sırasıyla şuradan IPv4 alınır:
+#   1. QEMU guest agent (VM'de qemu-guest-agent kurulu ve Options > QEMU Guest
+#      Agent açık olmalı)
+#   2. LXC container'ın çalışan arayüzleri
+#   3. Cloud-init ipconfig0 / LXC net0'daki statik IP
+# Hiçbiri yoksa VM adı kullanılır. Host'a özel değer gerekirse AWX'te host
+# değişkeni olarak ansible_host verilebilir.
+compose:
+  ansible_host: >-
+    (
+      (proxmox_agent_interfaces | default([])
+        | rejectattr('name', 'match', '^(lo|docker|br-|veth|cni|podman|virbr|flannel|cali)')
+        | map(attribute='ip-addresses') | flatten | list)
+      + (proxmox_lxc_interfaces | default([])
+        | rejectattr('name', 'equalto', 'lo')
+        | selectattr('inet', 'defined') | map(attribute='inet') | list)
+      + [proxmox_ipconfig0.ip | default(''), proxmox_net0.ip | default('')]
+    )
+    | select('match', '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(/|$)')
+    | map('regex_replace', '/.*$', '')
+    | first | default(proxmox_name)
+
+# Hazır gruplar (eklentiden): proxmox_all_running, proxmox_all_stopped,
+# proxmox_all_qemu, proxmox_all_lxc, proxmox_<node>_qemu, proxmox_pool_<pool>.
+# Job template'lerinde Limit olarak kullanılabilir, ör. "proxmox_all_running".
+groups:
+  windows: (proxmox_ostype | default('')) is match('^(win|w2k|wxp|wvista)')
+  linux: not ((proxmox_ostype | default('')) is match('^(win|w2k|wxp|wvista)'))
+
+# Proxmox etiketleri (Tags) -> tag_<etiket> grupları, ör. "web" -> tag_web.
+keyed_groups:
+  - key: proxmox_tags_parsed | default([])
+    prefix: tag

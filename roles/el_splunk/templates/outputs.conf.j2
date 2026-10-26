@@ -1,0 +1,7 @@
+# Gaia'nın yazdığı indexer listesi ({{ gaia_contract }}); elle
+# değiştirilirse bir sonraki run geri alır.
+[tcpout]
+defaultGroup = gaia_indexers
+
+[tcpout:gaia_indexers]
+server = {{ splunk_forward_servers | join(',') }}

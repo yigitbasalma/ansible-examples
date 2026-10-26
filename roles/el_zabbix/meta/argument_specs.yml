@@ -1,0 +1,52 @@
+---
+argument_specs:
+  main:
+    short_description: Zabbix ajanını (7.0 LTS) kurar ve Zabbix sunucusuna bağlar
+    description:
+      - zabbix-agent kurulur; pasif (sunucu sorar) ve aktif (ajan gönderir) kontroller zabbix_server'a açılır.
+      - Sunucuya otomatik kayıt (autoregistration) için HostMetadata yazılır. Inventory'de grup ya da host
+        değişkeni olarak zabbix_host_metadata verilmemişse "<dağıtım>|<ana sürüm>" kullanılır (ör. rocky|9).
+    options:
+      zabbix_server:
+        type: list
+        elements: str
+        default: []
+        description: Zabbix sunucuları ya da proxy'leri (ad veya IP); zorunlu. Pasif kontroller yalnızca bunlardan kabul edilir.
+      zabbix_server_port:
+        type: int
+        default: 10051
+        description: Aktif kontrollerin gönderildiği sunucu portu.
+      zabbix_listen_port:
+        type: int
+        default: 10050
+        description: Ajanın pasif kontroller için dinlediği port; firewalld çalışıyorsa açılır.
+      zabbix_hostname:
+        type: str
+        default: ""
+        description: Zabbix'teki host adı. Boşsa inventory'deki ad kullanılır.
+      zabbix_host_metadata:
+        type: str
+        default: ""
+        description: >-
+          Otomatik kayıtta sunucuya giden metadata; Zabbix'teki kayıt eylemleri buna göre host grubu ve şablon seçer.
+          Alanlar | ile ayrılır. Boşsa "<dağıtım>|<ana sürüm>" (ör. rocky|9, oraclelinux|8). En fazla 255 karakter.
+          Inventory'de grup ya da host değişkeni olarak verilir; extra var (AWX survey dahil, boş olsa bile) onu ezer.
+      zabbix_repo_url:
+        type: str
+        description: >-
+          Zabbix paket reposu (iç mirror verilebilir). Varsayılanı
+          https://repo.zabbix.com/zabbix/7.0/rhel/<ana sürüm>/$basearch/. Boş verilirse repo tanımlanmaz,
+          sunucudaki repolar kullanılır.
+      zabbix_repo_gpgkey:
+        type: str
+        default: https://repo.zabbix.com/RPM-GPG-KEY-ZABBIX-B5333005
+        description: Repo paketlerinin imza anahtarı.
+      zabbix_tls_psk_identity:
+        type: str
+        default: ""
+        description: PSK şifrelemesi için kimlik. zabbix_tls_psk ile birlikte verilirse bağlantılar PSK ile şifrelenir.
+      zabbix_tls_psk:
+        type: str
+        default: ""
+        no_log: true
+        description: PSK anahtarı (en az 32 hex karakter, ör. openssl rand -hex 32). Gizli tutulmalı.

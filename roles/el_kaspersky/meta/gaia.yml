@@ -1,0 +1,5 @@
+# Gaia'nın argument_specs'e eklediği bilgiler (AnsibleRoleSource: extra).
+checkMode: supported
+params:
+  kaspersky_ksc_server: { gaia: { pattern: '^[A-Za-z0-9.-]+$' } }
+  kaspersky_tags: { gaia: { pattern: '^[^;]+$' } }

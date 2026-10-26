@@ -1,0 +1,109 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+- name: Parametreler geçerli mi?
+  ansible.builtin.assert:
+    that:
+      - zabbix_server | length > 0
+      - "'\n' not in zabbix_effective_metadata"
+      - zabbix_effective_metadata | length <= 255
+      - (zabbix_tls_psk_identity | string | length > 0) == (zabbix_tls_psk | string | length > 0)
+      - zabbix_tls_psk | string is match('^([0-9a-fA-F]{32,512})?$')
+    fail_msg: >-
+      zabbix_server boş olamaz; metadata tek satır ve en fazla 255 karakter olmalı; PSK kimliği ve anahtarı
+      birlikte verilmeli, anahtar en az 32 hex karakter olmalı.
+    quiet: true
+  no_log: true
+
+# Zabbix paketleri EPEL'de de var; öncelik bu repodan kurulmasını sağlar.
+- name: Zabbix reposu
+  ansible.builtin.yum_repository:
+    name: zabbix
+    description: Zabbix 7.0
+    baseurl: "{{ zabbix_repo_url }}"
+    gpgkey: "{{ zabbix_repo_gpgkey }}"
+    gpgcheck: true
+    priority: "1"
+  register: zabbix_repo
+  when: zabbix_repo_url | length > 0
+
+# Check mode'da repo henüz eklenmediyse paket bulunamaz; sapma zaten repo
+# task'ında görünür.
+- name: zabbix-agent
+  ansible.builtin.dnf:
+    name: zabbix-agent
+    state: present
+  register: zabbix_package
+  when: not (ansible_check_mode and zabbix_repo is changed)
+
+# Check mode'da paket henüz kurulmadıysa zabbix kullanıcısı ve servis
+# yoktur.
+- name: Ajan ayarları ve servis
+  when: not (ansible_check_mode and (zabbix_repo is changed or zabbix_package is changed))
+  block:
+    - name: PSK anahtarı
+      ansible.builtin.copy:
+        content: "{{ zabbix_tls_psk }}\n"
+        dest: /etc/zabbix/zabbix_agentd.psk
+        owner: zabbix
+        group: zabbix
+        mode: "0600"
+      register: zabbix_psk_file
+      no_log: true
+      when: zabbix_psk_enabled | bool
+
+    - name: PSK anahtarı yok (şifreleme kapalı)
+      ansible.builtin.file:
+        path: /etc/zabbix/zabbix_agentd.psk
+        state: absent
+      register: zabbix_psk_removed
+      when: not zabbix_psk_enabled | bool
+
+    # -p ayarları okuyup çıkar; geçersiz ayar dosya yerine konmadan reddedilir.
+    - name: Ajan ayarları
+      ansible.builtin.template:
+        src: zabbix_agentd.conf.j2
+        dest: /etc/zabbix/zabbix_agentd.conf
+        owner: root
+        group: zabbix
+        mode: "0640"
+        validate: zabbix_agentd -c %s -p
+      register: zabbix_conf
+
+    - name: Ajan açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: zabbix-agent
+        enabled: true
+        state: started
+      register: zabbix_started
+
+    - name: Ajan yeni ayarla yeniden başlasın
+      ansible.builtin.systemd_service:
+        name: zabbix-agent
+        state: restarted
+      when:
+        - zabbix_conf is changed or zabbix_psk_file is changed or zabbix_psk_removed is changed
+        - zabbix_started is not changed
+
+    - name: Servisler
+      ansible.builtin.service_facts:
+
+    - name: Güvenlik duvarı (firewalld çalışıyorsa)
+      ansible.posix.firewalld:
+        port: "{{ zabbix_listen_port }}/tcp"
+        permanent: true
+        immediate: true
+        state: enabled
+      when: ansible_facts.services['firewalld.service'].state | default('') == 'running'
+
+- name: Zabbix kaydı
+  ansible.builtin.debug:
+    msg: >-
+      Host {{ zabbix_effective_hostname }}, metadata "{{ zabbix_effective_metadata }}",
+      sunucu {{ zabbix_server | join(', ') }}, şifreleme {{ 'PSK' if zabbix_psk_enabled | bool else 'yok' }}

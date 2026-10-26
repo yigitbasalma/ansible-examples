@@ -1,0 +1,10 @@
+---
+zabbix_server: []
+zabbix_server_port: 10051
+zabbix_listen_port: 10050
+zabbix_hostname: ""
+zabbix_host_metadata: ""
+zabbix_repo_url: https://repo.zabbix.com/zabbix/7.0/rhel/{{ ansible_facts.distribution_major_version }}/$basearch/
+zabbix_repo_gpgkey: https://repo.zabbix.com/RPM-GPG-KEY-ZABBIX-B5333005
+zabbix_tls_psk_identity: ""
+zabbix_tls_psk: ""

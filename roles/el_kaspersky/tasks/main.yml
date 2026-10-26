@@ -1,0 +1,138 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+- name: KSC adresi verildi
+  ansible.builtin.assert:
+    that: kaspersky_ksc_server | length > 0
+    fail_msg: kaspersky_ksc_server verilmeli.
+    quiet: true
+
+- name: Kurulu paketler
+  ansible.builtin.package_facts:
+
+- name: Paket imza anahtarı
+  ansible.builtin.rpm_key:
+    key: "{{ kaspersky_gpg_key }}"
+    state: present
+  when:
+    - kaspersky_nagent_package_name not in ansible_facts.packages or kaspersky_kesl_package_name not in ansible_facts.packages
+    - kaspersky_nagent_package_url | length > 0 or kaspersky_kesl_package_url | length > 0
+    - kaspersky_gpg_check | bool
+    - kaspersky_gpg_key | length > 0
+
+# Network Agent ilk kurulumda answer file ile, sessizce yapılandırılır
+# (KLAUTOANSWERS); dosya kurulumdan sonra silinir.
+- name: Network Agent
+  when: kaspersky_nagent_package_name not in ansible_facts.packages
+  block:
+    - name: Network Agent answer file
+      ansible.builtin.tempfile:
+        suffix: .klnagent
+      register: klnagent_answers
+      check_mode: false
+
+    - name: Network Agent answer file içeriği
+      ansible.builtin.template:
+        src: klnagent.answers.j2
+        dest: "{{ klnagent_answers.path }}"
+        mode: "0600"
+      check_mode: false
+
+    - name: Network Agent kurulumu
+      ansible.builtin.dnf:
+        name: "{{ kaspersky_nagent_package_url or kaspersky_nagent_package_name }}"
+        state: present
+        disable_gpg_check: "{{ not kaspersky_gpg_check | bool }}"
+      environment:
+        KLAUTOANSWERS: "{{ klnagent_answers.path }}"
+      register: klnagent_package
+  always:
+    - name: Network Agent answer file silinsin
+      ansible.builtin.file:
+        path: "{{ klnagent_answers.path }}"
+        state: absent
+      check_mode: false
+      when: klnagent_answers.path is defined
+
+# Check mode'da paket henüz kurulmadıysa klnagchk ve servis yoktur.
+- name: Network Agent bağlantısı ve servisi
+  when: not (ansible_check_mode and klnagent_package is changed)
+  block:
+    - name: Network Agent durumu
+      ansible.builtin.command: "{{ klnagent_bin }}/klnagchk"
+      register: klnagchk
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # Sonradan değişen KSC adresi: ajan yeniden kurulmadan taşınır.
+    - name: Network Agent KSC'ye taşınsın
+      ansible.builtin.command:
+        argv: >-
+          {{ [klnagent_bin ~ '/klmover', '-address', kaspersky_ksc_server,
+              '-pn', kaspersky_ksc_port | string, '-ps', kaspersky_ksc_ssl_port | string]
+             + ([] if kaspersky_ksc_use_ssl | bool else ['-nossl']) }}
+      changed_when: true
+      when: kaspersky_ksc_server not in klnagchk.stdout
+
+    - name: Network Agent açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: klnagent64
+        enabled: true
+        state: started
+
+- name: KESL
+  ansible.builtin.dnf:
+    name: "{{ kaspersky_kesl_package_url or kaspersky_kesl_package_name }}"
+    state: present
+    disable_gpg_check: "{{ not kaspersky_gpg_check | bool }}"
+  register: kesl_package
+  when: kaspersky_kesl_package_name not in ansible_facts.packages
+
+- name: KESL yapılandırması ve servisi
+  when: not (ansible_check_mode and kesl_package is changed)
+  block:
+    # Kurulumdan sonra bir kez yapılandırılmalı; yapılandırılmamış KESL
+    # app-info'ya hata döner.
+    - name: KESL yapılandırılmış mı?
+      ansible.builtin.command: "{{ kesl_bin }}/kesl-control --app-info"
+      register: kesl_info
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: KESL ilk yapılandırma
+      when: kesl_info.rc != 0
+      block:
+        - name: KESL autoinstall dosyası
+          ansible.builtin.tempfile:
+            suffix: .kesl
+          register: kesl_answers
+
+        - name: KESL autoinstall dosyası içeriği
+          ansible.builtin.template:
+            src: kesl-autoinstall.ini.j2
+            dest: "{{ kesl_answers.path }}"
+            mode: "0600"
+
+        - name: KESL ilk yapılandırma (güncellemeler KSC'den)
+          ansible.builtin.command: "{{ kesl_bin }}/kesl-setup.pl --autoinstall={{ kesl_answers.path }}"
+          changed_when: true
+      always:
+        - name: KESL autoinstall dosyası silinsin
+          ansible.builtin.file:
+            path: "{{ kesl_answers.path }}"
+            state: absent
+          when: kesl_answers.path is defined
+
+    - name: KESL açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: kesl
+        enabled: true
+        state: started

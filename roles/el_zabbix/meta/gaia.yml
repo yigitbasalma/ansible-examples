@@ -1,0 +1,5 @@
+# Gaia'nın argument_specs'e eklediği bilgiler (AnsibleRoleSource: extra).
+checkMode: supported
+params:
+  zabbix_host_metadata: { gaia: { pattern: '^[^\n]{0,255}$' } }
+  zabbix_tls_psk: { gaia: { pattern: '^([0-9a-fA-F]{32,512})?$' } }

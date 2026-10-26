@@ -1,0 +1,55 @@
+---
+argument_specs:
+  main:
+    short_description: Splunk Universal Forwarder'ı kurar ve deployment server'a bağlar
+    description:
+      - Paket splunk_package_url'den (ör. Nexus) ya da sunucuda tanımlı bir repodan kurulur. Kurulu paket yükseltilmez.
+      - Hangi logların toplanacağı (inputs) ve gerekirse nereye gönderileceği (outputs) deployment server'dan
+        gelen app'lerle yönetilir. Deployment server yoksa splunk_forward_servers ile indexer'lar doğrudan verilir.
+    options:
+      splunk_package_url:
+        type: str
+        default: ""
+        description: Forwarder rpm'inin adresi. Boşsa splunk_package_name sunucudaki repolardan kurulur.
+      splunk_package_name:
+        type: str
+        default: splunkforwarder
+        description: Paket adı (repodan kurulurken ve kurulu olup olmadığına bakarken).
+      splunk_gpg_key:
+        type: str
+        default: "https://docs.splunk.com/images/6/6b/SplunkPGPKey.pub"
+        description: >-
+          rpm imza anahtarı (adres ya da sunucudaki dosya); splunk_package_url ile kurulumdan önce
+          içe aktarılır. Varsayılan üreticinin anahtarıdır.
+      splunk_gpg_check:
+        type: bool
+        default: true
+        description: >-
+          false ise splunk_package_url ile kurulan paketin imzası doğrulanmaz. Yalnızca imzasız paket kullanılan
+          ortamlarda kapatılır.
+      splunk_deployment_server:
+        type: str
+        default: ""
+        description: Deployment server, host:port biçiminde (ör. splunk-ds.example.com:8089).
+      splunk_forward_servers:
+        type: list
+        elements: str
+        default: []
+        description: >-
+          Logların doğrudan gönderileceği indexer'lar, host:port (ör. idx1.example.com:9997). Deployment server
+          outputs'u kendisi dağıtıyorsa boş bırakılır. splunk_deployment_server ile ikisinden en az biri gerekir.
+      splunk_client_name:
+        type: str
+        default: ""
+        description: Deployment server'da görünen istemci adı. Boşsa inventory'deki ad.
+      splunk_admin_password:
+        type: str
+        default: ""
+        no_log: true
+        description: >-
+          Forwarder'ın yerel admin parolası; yalnızca ilk kurulumda uygulanır. Boşsa yerel admin kullanıcısı
+          oluşturulmaz (yönetim deployment server'dan yapılır).
+      splunk_user:
+        type: str
+        default: splunkfwd
+        description: Forwarder'ın çalıştığı kullanıcı. 9.1 öncesi paketlerde splunk.

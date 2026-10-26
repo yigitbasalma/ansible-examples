@@ -1,0 +1,9 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
+nessuscli: /opt/nessus_agent/sbin/nessuscli
+nessus_target: "{{ nessus_manager_host }}:{{ nessus_manager_port }}"
+nessus_effective_name: "{{ nessus_agent_name or inventory_hostname }}"

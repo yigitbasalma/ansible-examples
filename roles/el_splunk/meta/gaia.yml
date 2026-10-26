@@ -1,0 +1,4 @@
+# Gaia'nın argument_specs'e eklediği bilgiler (AnsibleRoleSource: extra).
+checkMode: supported
+params:
+  splunk_deployment_server: { gaia: { pattern: '^([A-Za-z0-9.-]+:[0-9]+)?$' } }

@@ -1,0 +1,14 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
+# Burada yalnızca türetilen değerler durur: rol vars'ı inventory'den
+# öncelikli olduğu için zabbix_host_metadata gibi parametreler defaults'ta
+# kalır ve group_vars / host_vars ile ezilebilir. AWX survey boş alanı ""
+# gönderir; boş değer de "verilmedi" sayılır.
+zabbix_effective_hostname: "{{ zabbix_hostname or inventory_hostname }}"
+zabbix_effective_metadata: >-
+  {{ zabbix_host_metadata or (ansible_facts.distribution | lower ~ '|' ~ ansible_facts.distribution_major_version) }}
+zabbix_psk_enabled: "{{ zabbix_tls_psk_identity | string | length > 0 and zabbix_tls_psk | string | length > 0 }}"

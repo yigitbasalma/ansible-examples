@@ -1,0 +1,34 @@
+---
+# Ajanları kurar. AWX job template'inde Playbook: playbooks/agents.yml
+#
+# agents hangi ajanların kurulacağını seçer (varsayılan hepsi): liste ya da
+# "zabbix,splunk" gibi metin; AWX survey'de multiselect olarak verilebilir.
+# Her rolün parametreleri kendi roles/el_<ajan>/meta/argument_specs.yml
+# dosyasında. Sunucu adresleri group_vars ile, linking key gibi gizli
+# değerler AWX credential'larıyla verilir.
+#
+# Zabbix metadata'sı (zabbix_host_metadata) inventory'de grup ya da host
+# değişkeni olarak verilir; verilmemişse "<dağıtım>|<ana sürüm>" (ör. rocky|9).
+# Survey'e konmamalı: boş bırakılan survey alanı da extra var olarak gider
+# ve inventory'deki değeri ezer.
+# Bir ajan bir host'ta düşerse sonraki ajanlar o host'a kurulmaz.
+- name: Ajanlar
+  hosts: all
+  become: true
+  vars:
+    # Rolün şablonları dosyanın başına kimin yazdığını koyar. Job ID'si
+    # değil template adı: her run'da dosya değişip servisler yeniden
+    # başlamasın.
+    gaia_contract: "AWX: {{ awx_job_template_name | default('elle çalıştırıldı') }}"
+    agents_selected: >-
+      {{ agents | default(['zabbix', 'splunk', 'nessus', 'kaspersky']) | string | lower
+         | regex_findall('zabbix|splunk|nessus|kaspersky') }}
+  roles:
+    - role: el_zabbix
+      when: "'zabbix' in agents_selected"
+    - role: el_splunk
+      when: "'splunk' in agents_selected"
+    - role: el_nessus
+      when: "'nessus' in agents_selected"
+    - role: el_kaspersky
+      when: "'kaspersky' in agents_selected"

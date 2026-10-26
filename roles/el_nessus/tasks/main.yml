@@ -1,0 +1,88 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+- name: Yönetim sunucusu ve linking key verildi
+  ansible.builtin.assert:
+    that:
+      - nessus_manager_host | length > 0
+      - nessus_linking_key | string | length > 0
+    fail_msg: nessus_manager_host ve nessus_linking_key verilmeli.
+    quiet: true
+
+- name: Kurulu paketler
+  ansible.builtin.package_facts:
+
+- name: Paket imza anahtarı
+  ansible.builtin.rpm_key:
+    key: "{{ nessus_gpg_key }}"
+    state: present
+  when:
+    - nessus_package_name not in ansible_facts.packages
+    - nessus_package_url | length > 0
+    - nessus_gpg_check | bool
+    - nessus_gpg_key | length > 0
+
+# Kuruluysa rpm her run'da yeniden indirilmez.
+- name: Nessus Agent
+  ansible.builtin.dnf:
+    name: "{{ nessus_package_url or nessus_package_name }}"
+    state: present
+    disable_gpg_check: "{{ not nessus_gpg_check | bool }}"
+  register: nessus_package
+  when: nessus_package_name not in ansible_facts.packages
+
+# Check mode'da paket henüz kurulmadıysa servis ve nessuscli yoktur.
+- name: Ajan servisi ve bağlantı
+  when: not (ansible_check_mode and nessus_package is changed)
+  block:
+    - name: Ajan açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: nessusagent
+        enabled: true
+        state: started
+
+    - name: Bağlantı durumu
+      ansible.builtin.command: "{{ nessuscli }} agent status"
+      register: nessus_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Bağlı olduğu sunucu
+      ansible.builtin.set_fact:
+        nessus_linked_to: "{{ nessus_status.stdout | regex_search('Linked to: (\\S+)', '\\1') | default([], true) | first | default('None') }}"
+
+    - name: Başka bir sunucudan bağı kopar
+      ansible.builtin.command: "{{ nessuscli }} agent unlink"
+      changed_when: true
+      when: nessus_linked_to not in ['None', nessus_target]
+
+    # Anahtar komut satırında olduğu için çıktı gizlenir; hata aşağıda
+    # anahtarsız gösterilir.
+    - name: Yönetim sunucusuna bağlan
+      ansible.builtin.command:
+        argv: >-
+          {{ [nessuscli, 'agent', 'link',
+              '--key=' ~ nessus_linking_key,
+              '--host=' ~ nessus_manager_host,
+              '--port=' ~ nessus_manager_port,
+              '--name=' ~ nessus_effective_name]
+             + (['--groups=' ~ nessus_agent_groups | join(',')] if nessus_agent_groups else []) }}
+      register: nessus_link
+      changed_when: nessus_link.rc == 0
+      failed_when: false
+      no_log: true
+      when: nessus_linked_to != nessus_target
+
+    - name: Bağlanamadı
+      ansible.builtin.fail:
+        msg: "{{ nessus_target }} sunucusuna bağlanamadı: {{ (nessus_link.stdout ~ ' ' ~ nessus_link.stderr) | trim }}"
+      when:
+        - nessus_link is not skipped
+        - nessus_link.rc | default(0) != 0
