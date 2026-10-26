@@ -1,0 +1,19 @@
+---
+# Repoda duran (vendor) collection'lar. Ortam internete kapalı olduğu için
+# AWX bunları Galaxy'den kurmaz; ansible.cfg'deki collections_path ile
+# collections/ansible_collections altından okunur.
+#
+# Dosyanın adı bilerek requirements.yml değil: AWX proje senkronizasyonunda
+# collections/requirements.yml'yi görürse Galaxy'ye bağlanmaya çalışır ve
+# internetsiz ortamda senkronizasyon düşer.
+#
+# Collection eklemek ya da sürüm yükseltmek için internete açık bir makinede,
+# repo kökünde:
+#   ansible-galaxy collection install -r collections/requirements-vendor.yml -p collections --force
+# Ardından collections/ansible_collections altındaki değişiklikler commit
+# edilir. Kaldırılan bir collection'ın dizini elle silinir.
+collections:
+  - name: ansible.posix       # nginx rolü: firewalld; el_hardening: mount
+    version: 2.2.2
+  - name: community.proxmox   # inventories/proxmox: dinamik inventory (EE'de python requests gerekir)
+    version: 2.1.0
