@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: Oracle Linux 8 sunucuyu CIS benzeri bir temel sıkılaştırma seviyesine getirir
+    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuyu CIS benzeri bir temel sıkılaştırma seviyesine getirir
     description:
       - Kernel parametreleri, kernel modülleri, geçici dizinlerin bağlama seçenekleri, gereksiz paket ve servisler,
         SELinux, kripto politikası, parola/kilitleme politikası, umask, banner ve sshd ayarlarını düzenler.

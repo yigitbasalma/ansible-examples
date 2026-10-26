@@ -1,6 +1,11 @@
 ---
 # Parametre olarak açılmayan sabit temel değerler.
 
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
 # Dosyada diğerlerinden önce yazılır: forwarding değişince kernel
 # conf.all.accept_redirects'i yeniden ayarlar.
 sysctl_forwarding:

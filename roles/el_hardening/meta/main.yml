@@ -1,10 +1,10 @@
 ---
 galaxy_info:
   author: Gaia
-  description: Oracle Linux 8 için CIS benzeri temel sıkılaştırma (örnek rol)
+  description: Oracle Linux 8 ve Rocky Linux 9 için CIS benzeri temel sıkılaştırma (örnek rol)
   license: Apache-2.0
   min_ansible_version: "2.21"
   platforms:
     - name: EL
-      versions: ["8"]
+      versions: ["8", "9"]
 dependencies: []

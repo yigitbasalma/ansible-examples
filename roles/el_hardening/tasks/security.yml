@@ -5,8 +5,9 @@
     state: present
   register: selinux_packages
 
-# ansible.posix.selinux OL8'de çalışmaz: ansible-core 2.21 Python >= 3.9
+# ansible.posix.selinux EL8'de çalışmaz: ansible-core 2.21 Python >= 3.9
 # ister, libselinux bağlaması ise yalnızca platform-python (3.6) için var.
+# İki sürümde de aynı yol izlenir.
 # Check mode'da paketler henüz kurulmadıysa config ve getenforce yoktur;
 # sapma zaten paket task'ında görünür.
 - name: SELinux modu

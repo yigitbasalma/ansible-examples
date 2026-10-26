@@ -1,0 +1,38 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+# Hiçbir şey değişmeden önce: aksi halde bir sonraki run'da erişim kaybedilir.
+# AWX kullanıcıyı -u ile verir, ansible_user tanımlı olmaz; bağlanan
+# kullanıcı hedefte okunur (sudo ile SUDO_USER, değilse fact'lerin kullanıcısı).
+- name: root girişi kapatılırken Ansible root ile bağlanmıyor
+  ansible.builtin.assert:
+    that: not (ssh_hardening and ssh_root_login == 'no' and login_user == 'root')
+    fail_msg: ssh_root_login "no" iken Ansible root ile bağlanıyor; bir sonraki run'da sunucuya erişilemez.
+    quiet: true
+  vars:
+    login_user: "{{ ansible_user | default(ansible_facts.env.SUDO_USER | default(ansible_facts.user_id)) }}"
+
+- name: Kernel
+  ansible.builtin.import_tasks: kernel.yml
+
+- name: Dosya sistemi
+  ansible.builtin.import_tasks: filesystem.yml
+
+- name: Paketler ve servisler
+  ansible.builtin.import_tasks: packages.yml
+
+- name: SELinux ve kripto politikası
+  ansible.builtin.import_tasks: security.yml
+
+- name: Parola, oturum ve banner
+  ansible.builtin.import_tasks: auth.yml
+
+- name: sshd
+  ansible.builtin.import_tasks: ssh.yml
+  when: ssh_hardening

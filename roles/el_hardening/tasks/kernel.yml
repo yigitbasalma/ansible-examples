@@ -1,4 +1,12 @@
 ---
+# Minimal kurulumlarda (ör. container imajları) bu dizinler olmayabilir.
+- name: Ayar dizinleri
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/etc/sysctl.d, /etc/modprobe.d, /etc/systemd/coredump.conf.d]
+
 - name: Kernel parametreleri
   ansible.builtin.template:
     src: sysctl.conf.j2
@@ -25,12 +33,6 @@
     content: "* hard core 0\n"
     dest: /etc/security/limits.d/60-gaia-hardening.conf
     mode: "0644"
-
-- name: systemd-coredump ayar dizini
-  ansible.builtin.file:
-    path: /etc/systemd/coredump.conf.d
-    state: directory
-    mode: "0755"
 
 - name: Core dump kapalı (systemd-coredump)
   ansible.builtin.copy:
