@@ -1,0 +1,18 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  listen: systemd changed
+
+# Both listen to "sshd changed" and run in this order: the reload only
+# when the check passed.
+- name: Check sshd
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  listen: sshd changed
+
+- name: Reload sshd
+  ansible.builtin.systemd_service:
+    name: sshd
+    state: reloaded
+  listen: sshd changed

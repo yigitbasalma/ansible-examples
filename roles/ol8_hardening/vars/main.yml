@@ -1,0 +1,58 @@
+---
+# Parametre olarak açılmayan sabit temel değerler.
+
+# Dosyada diğerlerinden önce yazılır: forwarding değişince kernel
+# conf.all.accept_redirects'i yeniden ayarlar.
+sysctl_forwarding:
+  net.ipv4.ip_forward: "{{ ip_forward | ternary(1, 0) }}"
+  net.ipv6.conf.all.forwarding: "{{ ip_forward | ternary(1, 0) }}"
+
+sysctl_baseline:
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.conf.default.log_martians: 1
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.default.rp_filter: 1
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.icmp_ignore_bogus_error_responses: 1
+  net.ipv4.tcp_syncookies: 1
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+  net.ipv6.conf.all.accept_source_route: 0
+  net.ipv6.conf.default.accept_source_route: 0
+  kernel.randomize_va_space: 2
+  kernel.dmesg_restrict: 1
+  kernel.kptr_restrict: 1
+  kernel.yama.ptrace_scope: 1
+  fs.suid_dumpable: 0
+
+sshd_baseline:
+  PermitRootLogin: "{{ ssh_root_login }}"
+  MaxAuthTries: "{{ ssh_max_auth_tries }}"
+  ClientAliveInterval: "{{ ssh_client_alive_interval }}"
+  ClientAliveCountMax: 3
+  LoginGraceTime: 60
+  PermitEmptyPasswords: "no"
+  HostbasedAuthentication: "no"
+  IgnoreRhosts: "yes"
+  X11Forwarding: "no"
+  PermitUserEnvironment: "no"
+  Banner: /etc/issue.net
+
+critical_paths:
+  - { path: /etc/ssh/sshd_config, mode: "0600", state: file }
+  - { path: /etc/crontab, mode: "0600", state: file }
+  - { path: /etc/cron.hourly, mode: "0700", state: directory }
+  - { path: /etc/cron.daily, mode: "0700", state: directory }
+  - { path: /etc/cron.weekly, mode: "0700", state: directory }
+  - { path: /etc/cron.monthly, mode: "0700", state: directory }
+  - { path: /etc/cron.d, mode: "0700", state: directory }

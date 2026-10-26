@@ -1,0 +1,6 @@
+# Gaia'nın engellediği kernel modülleri ({{ gaia_contract }}); elle
+# değiştirilirse bir sonraki run geri alır.
+{% for module in disabled_kernel_modules %}
+install {{ module }} /bin/false
+blacklist {{ module }}
+{% endfor %}

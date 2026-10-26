@@ -1,0 +1,20 @@
+---
+ip_forward: false
+disabled_kernel_modules: [cramfs, freevxfs, jffs2, hfs, hfsplus, squashfs, udf, usb-storage]
+secure_mounts: [/dev/shm, /tmp, /var/tmp]
+remove_packages: [telnet-server, tftp-server, vsftpd, xinetd, ypserv, rsh-server, talk-server]
+disable_services: [avahi-daemon, cups]
+selinux_state: enforcing
+crypto_policy: DEFAULT
+umask: "027"
+pass_max_days: 90
+pass_min_days: 1
+pass_warn_age: 7
+pass_min_len: 14
+faillock_deny: 5
+faillock_unlock_time: 900
+banner_text: Bu sistem yalnızca yetkili kullanıcılar içindir. Tüm erişimler kayıt altına alınır.
+ssh_hardening: true
+ssh_root_login: prohibit-password
+ssh_max_auth_tries: 4
+ssh_client_alive_interval: 300

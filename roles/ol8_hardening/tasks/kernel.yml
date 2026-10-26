@@ -1,0 +1,53 @@
+---
+- name: Kernel parametreleri
+  ansible.builtin.template:
+    src: sysctl.conf.j2
+    dest: /etc/sysctl.d/60-gaia-hardening.conf
+    mode: "0644"
+  register: sysctl_conf
+
+# Handler değil: run sonradan düşerse handler kaybolur, sonraki run'lar
+# dosyayı değişmemiş bulur ve değerler hiç uygulanmaz.
+- name: Kernel parametreleri uygulansın
+  ansible.builtin.command: sysctl --system
+  when: sysctl_conf is changed
+  changed_when: true
+
+# Yüklü bir modül hemen çıkarılmaz; engel bir sonraki açılışta tamamlanır.
+- name: Gereksiz kernel modülleri
+  ansible.builtin.template:
+    src: modprobe.conf.j2
+    dest: /etc/modprobe.d/gaia-hardening.conf
+    mode: "0644"
+
+- name: Core dump kapalı (limits)
+  ansible.builtin.copy:
+    content: "* hard core 0\n"
+    dest: /etc/security/limits.d/60-gaia-hardening.conf
+    mode: "0644"
+
+- name: systemd-coredump ayar dizini
+  ansible.builtin.file:
+    path: /etc/systemd/coredump.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Core dump kapalı (systemd-coredump)
+  ansible.builtin.copy:
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+    dest: /etc/systemd/coredump.conf.d/60-gaia-hardening.conf
+    mode: "0644"
+  notify: systemd changed
+
+# systemctl mask, /etc altında reboot.target'a giden bir bağ varsa onu
+# ezemez; maske doğrudan yazılır.
+- name: Ctrl-Alt-Del ile yeniden başlatma kapalı
+  ansible.builtin.file:
+    src: /dev/null
+    dest: /etc/systemd/system/ctrl-alt-del.target
+    state: link
+    force: true
+  notify: systemd changed

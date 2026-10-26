@@ -1,0 +1,63 @@
+---
+# login.defs yalnızca bundan sonra açılan kullanıcılara uygulanır.
+- name: Parola süreleri ve varsayılan umask (login.defs)
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^\s*{{ item.key }}\s'
+    line: "{{ item.key }}\t{{ item.value }}"
+  loop:
+    - { key: PASS_MAX_DAYS, value: "{{ pass_max_days }}" }
+    - { key: PASS_MIN_DAYS, value: "{{ pass_min_days }}" }
+    - { key: PASS_WARN_AGE, value: "{{ pass_warn_age }}" }
+    - { key: UMASK, value: "{{ umask }}" }
+  loop_control:
+    label: "{{ item.key }}"
+
+# /etc/profile ve /etc/bashrc kendi umask'larını profile.d'den önce
+# koyar; bu dosya onları ezer.
+- name: Oturum umask'ı
+  ansible.builtin.copy:
+    content: "umask {{ umask }}\n"
+    dest: /etc/profile.d/gaia-umask.sh
+    mode: "0644"
+
+- name: Parola kalitesi
+  ansible.builtin.template:
+    src: pwquality.conf.j2
+    dest: /etc/security/pwquality.conf.d/60-gaia-hardening.conf
+    mode: "0644"
+
+- name: authselect profili
+  ansible.builtin.command: authselect current
+  register: authselect_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+# authselect'e bağlı olmayan (elle yazılmış PAM) sunuculara dokunulmaz.
+- name: Hatalı girişte hesap kilitlensin (authselect with-faillock)
+  ansible.builtin.command: authselect enable-feature with-faillock
+  when:
+    - authselect_current.rc == 0
+    - "'with-faillock' not in authselect_current.stdout"
+  changed_when: true
+
+- name: Kilitleme eşikleri
+  ansible.builtin.lineinfile:
+    path: /etc/security/faillock.conf
+    regexp: '^#?\s*{{ item.key }}\s*='
+    line: "{{ item.key }} = {{ item.value }}"
+  loop:
+    - { key: deny, value: "{{ faillock_deny }}" }
+    - { key: unlock_time, value: "{{ faillock_unlock_time }}" }
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Giriş uyarısı
+  ansible.builtin.copy:
+    content: "{{ banner_text }}\n"
+    dest: "{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [/etc/issue, /etc/issue.net, /etc/motd]

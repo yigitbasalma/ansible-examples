@@ -1,0 +1,46 @@
+---
+# ansible_facts.mounts tmpfs'leri (ör. /dev/shm) listelemez.
+- name: Bağlı dosya sistemleri
+  ansible.builtin.command: findmnt --list --json --output TARGET,SOURCE,FSTYPE
+  register: findmnt
+  changed_when: false
+  check_mode: false
+
+# Yalnızca ayrı bağlı olan dizinler; / üzerindeki bir /tmp'ye ve bind
+# mount'lara (kaynağı "aygıt[/alt/dizin]") dokunulmaz. fstab satırı mevcut
+# aygıt ve dosya sistemiyle yeniden yazılır, dizin yeniden bağlanır.
+- name: Geçici dizinler nodev,nosuid,noexec
+  ansible.posix.mount:
+    path: "{{ item.target }}"
+    src: "{{ item.source }}"
+    fstype: "{{ item.fstype }}"
+    opts: defaults,nodev,nosuid,noexec
+    state: mounted
+  loop: >-
+    {{ (findmnt.stdout | from_json).filesystems
+       | selectattr('target', 'in', secure_mounts)
+       | rejectattr('source', 'search', '\[')
+       | list }}
+  loop_control:
+    label: "{{ item.target }}"
+
+- name: Kritik dosya ve dizinler
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop: "{{ critical_paths }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: critical_stats
+
+# Olmayan yol yaratılmaz (ör. cronie kurulu değilse cron dizinleri).
+- name: Kritik dosya ve dizin izinleri
+  ansible.builtin.file:
+    path: "{{ item.item.path }}"
+    state: "{{ item.item.state }}"
+    owner: root
+    group: root
+    mode: "{{ item.item.mode }}"
+  loop: "{{ critical_stats.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: item.stat.exists

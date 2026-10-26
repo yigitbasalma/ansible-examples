@@ -1,0 +1,5 @@
+# Gaia'nın argument_specs'e eklediği bilgiler (AnsibleRoleSource: extra).
+# Check mode'da rol hiçbir şeyi değiştirmeden sapmaları "changed" olarak raporlar.
+checkMode: supported
+params:
+  umask: { gaia: { pattern: '^0?[0-7]{3}$' } }

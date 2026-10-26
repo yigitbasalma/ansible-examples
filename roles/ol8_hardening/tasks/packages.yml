@@ -1,0 +1,36 @@
+---
+- name: Paket imzası doğrulansın
+  ansible.builtin.lineinfile:
+    path: /etc/dnf/dnf.conf
+    regexp: '^\s*gpgcheck\s*='
+    line: gpgcheck=1
+    insertafter: '^\[main\]'
+
+- name: Gereksiz paketler
+  ansible.builtin.dnf:
+    name: "{{ remove_packages }}"
+    state: absent
+  when: remove_packages | length > 0
+
+- name: auditd
+  ansible.builtin.dnf:
+    name: audit
+    state: present
+
+- name: auditd açılışta başlasın ve çalışsın
+  ansible.builtin.systemd_service:
+    name: auditd
+    enabled: true
+    state: started
+
+- name: Servisler
+  ansible.builtin.service_facts:
+
+- name: Gereksiz servisler durdurulup maskelensin
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+    masked: true
+  loop: "{{ disable_services }}"
+  when: (item ~ '.service') in ansible_facts.services

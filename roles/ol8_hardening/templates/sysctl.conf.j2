@@ -1,0 +1,12 @@
+# Gaia'nın yazdığı kernel parametreleri ({{ gaia_contract }}); elle
+# değiştirilirse bir sonraki run geri alır.
+
+# Önce forwarding: değişirse kernel accept_redirects'i yeniden ayarlar,
+# aşağıdaki değerler onu düzeltir.
+{% for key, value in sysctl_forwarding | dictsort %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+{% for key, value in sysctl_baseline | dictsort %}
+{{ key }} = {{ value }}
+{% endfor %}
