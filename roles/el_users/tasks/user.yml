@@ -1,0 +1,78 @@
+---
+- name: "{{ u.name }}: hesap var mı?"
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ u.name }}"
+    fail_key: false
+
+# Erişimi kaldırırken açık SSH oturumları da kapanmalı; userdel de çalışan
+# süreci olan kullanıcıyı silmez.
+- name: "{{ u.name }}: oturumları kapat"
+  ansible.builtin.command: pkill -KILL -u {{ u.name }}
+  register: user_sessions
+  changed_when: user_sessions.rc == 0
+  failed_when: user_sessions.rc not in [0, 1]
+  when:
+    - u.state == 'absent'
+    - ansible_facts.getent_passwd[u.name] | default(none) is not none
+
+# Parola alanı "!": parola ile giriş yok, giriş anahtarla (EL'de sshd
+# UsePAM ile kilitli parolaya rağmen anahtarı kabul eder). disabled hesabın
+# süresi 1970-01-02'de dolmuştur (0 "süresiz" de okunabilir); sshd anahtarla
+# da girişi reddeder.
+- name: "{{ u.name }}: hesap"
+  ansible.builtin.user:
+    name: "{{ u.name }}"
+    state: "{{ 'absent' if u.state == 'absent' else 'present' }}"
+    comment: "{{ omit if u.state == 'absent' else u.comment }}"
+    uid: "{{ omit if u.state == 'absent' else u.uid | default(omit) }}"
+    shell: "{{ omit if u.state == 'absent' else u.shell }}"
+    groups: "{{ omit if u.state == 'absent' else u.groups }}"
+    append: false
+    password: "{{ omit if u.state == 'absent' else '!' }}"
+    update_password: always
+    expires: "{{ omit if u.state == 'absent' else (86400 if u.state == 'disabled' else -1) }}"
+    remove: "{{ u.remove_home | bool if u.state == 'absent' else omit }}"
+    force: "{{ true if u.state == 'absent' else omit }}"
+  register: user_account
+
+# Check mode'da yeni açılacak kullanıcının ev dizini henüz yoktur.
+- name: "{{ u.name }}: SSH anahtarları"
+  when:
+    - u.state != 'absent'
+    - not (ansible_check_mode and ansible_facts.getent_passwd[u.name] | default(none) is none)
+  block:
+    - name: "{{ u.name }}: ~/.ssh"
+      ansible.builtin.file:
+        path: ~{{ u.name }}/.ssh
+        state: directory
+        owner: "{{ u.name }}"
+        group: "{{ u.name }}"
+        mode: "0700"
+
+    # Dosya tam olarak listedeki anahtarlardır; disabled hesapta boştur.
+    - name: "{{ u.name }}: authorized_keys"
+      ansible.builtin.copy:
+        content: "{{ (u.ssh_keys | join('\n') ~ '\n') if u.state == 'present' and u.ssh_keys else '' }}"
+        dest: ~{{ u.name }}/.ssh/authorized_keys
+        owner: "{{ u.name }}"
+        group: "{{ u.name }}"
+        mode: "0600"
+
+- name: "{{ u.name }}: sudo"
+  ansible.builtin.template:
+    src: sudoers.j2
+    dest: /etc/sudoers.d/gaia-{{ u.name | replace('.', '_') }}
+    owner: root
+    group: root
+    mode: "0440"
+    validate: visudo -cf %s
+  when:
+    - u.state == 'present'
+    - u.sudo != 'none'
+
+- name: "{{ u.name }}: sudo yok"
+  ansible.builtin.file:
+    path: /etc/sudoers.d/gaia-{{ u.name | replace('.', '_') }}
+    state: absent
+  when: u.state != 'present' or u.sudo == 'none'

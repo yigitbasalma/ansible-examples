@@ -1,0 +1,27 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
+# argument_specs'teki alan varsayılanları değişkene uygulanmaz; her kayıt
+# bunlarla tamamlanır (kayıttaki değer kazanır).
+user_defaults:
+  state: present
+  comment: ""
+  groups: []
+  shell: /bin/bash
+  sudo: none
+  sudo_commands: []
+  ssh_keys: []
+  remove_home: false
+
+users_effective: "{{ [user_defaults] | product(users) | map('combine') | list }}"
+
+# Ansible'ın bağlandığı kullanıcı. AWX kullanıcıyı -u ile verir,
+# ansible_user tanımlı olmaz; sudo ile bağlanıldıysa SUDO_USER'dır.
+login_user: "{{ ansible_user | default(ansible_facts.env.SUDO_USER | default(ansible_facts.user_id)) }}"
+
+# Herkese açık anahtar satırı: başta isteğe bağlı seçenekler (from=,
+# restrict...), sonra tür ve base64 gövde.
+ssh_key_line: '(^|\s)(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp(256|384|521)|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com)\s+AAAA[0-9A-Za-z+/=]+'

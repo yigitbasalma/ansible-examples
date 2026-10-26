@@ -1,0 +1,7 @@
+# Gaia'nın yazdığı sudo yetkisi ({{ gaia_contract }}); elle değiştirilirse
+# bir sonraki run geri alır.
+{% if u.sudo == 'all' %}
+{{ u.name }} ALL=(ALL) NOPASSWD: ALL
+{% else %}
+{{ u.name }} ALL=(ALL) NOPASSWD: {{ u.sudo_commands | map('replace', ',', '\\,') | join(', ') }}
+{% endif %}

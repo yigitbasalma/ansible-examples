@@ -1,0 +1,64 @@
+---
+argument_specs:
+  main:
+    short_description: Yerel kullanıcıları, sudo yetkilerini ve SSH anahtarlarını yönetir
+    description:
+      - users listesindeki her kullanıcı kendi kaydıyla yönetilir; listede hiç olmayan kullanıcılara dokunulmaz.
+      - Hesapların parolası yoktur, giriş yalnızca SSH anahtarıyla yapılır; sudo bu yüzden parolasızdır.
+      - Kullanıcının authorized_keys dosyası tam olarak ssh_keys'tir, fazlası silinir. Ek grupları da tam olarak groups'tur.
+      - Bir kişinin erişimini her sunucudan kaldırmak için kaydı state absent (ya da disabled) yapılıp rol çalıştırılır.
+      - Ansible'ın bağlandığı kullanıcı kapatılamaz, sudo'su alınamaz ve anahtarları bir seferde tümüyle değiştirilemez;
+        anahtar değişimi iki adımda yapılır (önce yeni anahtar eklenir, sonra eskisi çıkarılır).
+    options:
+      users:
+        type: list
+        elements: dict
+        default: []
+        description: Yönetilen kullanıcılar.
+        options:
+          name:
+            type: str
+            required: true
+            description: Kullanıcı adı (küçük harf, rakam, _ . -; harf ya da _ ile başlar). root yönetilemez.
+          state:
+            type: str
+            default: present
+            choices: [present, disabled, absent]
+            description: >-
+              present hesap açık; disabled hesap süresi dolmuş (giriş yapılamaz), anahtarları ve sudo'su kaldırılır,
+              ev dizini kalır; absent oturumları kapatılır ve hesap silinir.
+          comment:
+            type: str
+            default: ""
+            description: Açıklama (ör. ad soyad, ekip).
+          uid:
+            type: int
+            description: Sabit kullanıcı numarası. Verilmezse sistem seçer.
+          groups:
+            type: list
+            elements: str
+            default: []
+            description: Ek gruplar; yoksa oluşturulur. Listede olmayan ek gruplardan çıkarılır.
+          shell:
+            type: str
+            default: /bin/bash
+            description: Kabuk.
+          sudo:
+            type: str
+            default: none
+            choices: [none, all, commands]
+            description: none sudo yok; all her komut; commands yalnızca sudo_commands'taki komutlar (parolasız).
+          sudo_commands:
+            type: list
+            elements: str
+            default: []
+            description: sudo commands iken izin verilen komutlar, tam yoluyla (ör. /usr/bin/systemctl restart nginx).
+          ssh_keys:
+            type: list
+            elements: str
+            default: []
+            description: SSH public key satırları (ör. "ssh-ed25519 AAAA... ad@makine").
+          remove_home:
+            type: bool
+            default: false
+            description: state absent iken ev dizini de silinsin.

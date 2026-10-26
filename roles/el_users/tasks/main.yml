@@ -1,0 +1,97 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+- name: Kullanıcı kayıtları geçerli mi?
+  ansible.builtin.assert:
+    that:
+      - u.name is match('^[a-z_][a-z0-9_.-]{0,31}$')
+      - u.name != 'root'
+      - u.sudo != 'commands' or u.sudo_commands | length > 0
+      - u.sudo_commands | reject('match', '^/') | list | length == 0
+      - u.ssh_keys | reject('search', ssh_key_line) | list | length == 0
+    fail_msg: >-
+      {{ u.name }}: ad küçük harf, rakam, _ . - içermeli ve en fazla 32 karakter olmalı (root yönetilemez);
+      sudo commands iken sudo_commands boş olamaz ve komutlar tam yoluyla yazılmalı; ssh_keys'teki her satır
+      bir SSH public key olmalı.
+    quiet: true
+  loop: "{{ users_effective }}"
+  loop_control:
+    loop_var: u
+    label: "{{ u.name }}"
+
+# sudoers.d'de adında nokta olan dosyalar sudo tarafından yok sayılır; dosya
+# adında nokta _ olur, bu yüzden a.b ve a_b aynı dosyaya düşmemeli.
+- name: Kullanıcı adları ve sudo dosya adları tekil mi?
+  ansible.builtin.assert:
+    that:
+      - names | unique | length == names | length
+      - names | map('replace', '.', '_') | unique | length == names | length
+    fail_msg: "Aynı ad iki kez verilmiş ya da yalnızca . ve _ ile ayrışan adlar var: {{ names | join(', ') }}"
+    quiet: true
+  vars:
+    names: "{{ users_effective | map(attribute='name') | list }}"
+
+# Ansible'ın kendi kullanıcısı: kapatılırsa, sudo'su alınırsa ya da
+# anahtarlarının hepsi birden değişirse bir sonraki run'da sunucuya
+# erişilemez.
+- name: Ansible'ın kullanıcısı
+  when: login_user in users_effective | map(attribute='name')
+  block:
+    - name: Ansible'ın kullanıcısı açık ve tam sudo yetkili kalıyor
+      ansible.builtin.assert:
+        that:
+          - me.state == 'present'
+          - me.sudo == 'all'
+          - me.ssh_keys | length > 0
+        fail_msg: >-
+          Ansible {{ login_user }} kullanıcısıyla bağlanıyor; bu kullanıcı state present, sudo all ve en az bir
+          anahtarla kalmalı.
+        quiet: true
+      vars:
+        me: "{{ users_effective | selectattr('name', 'eq', login_user) | first }}"
+
+    - name: Ansible'ın kullanıcısının ev dizini
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ login_user }}"
+
+    - name: Ansible'ın kullanıcısının mevcut anahtarları
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts.getent_passwd[login_user][4] }}/.ssh/authorized_keys"
+      register: login_user_keys
+      failed_when: false
+
+    - name: Mevcut anahtarlardan en az biri kalıyor
+      ansible.builtin.assert:
+        that: current | length == 0 or current | intersect(new) | length > 0
+        fail_msg: >-
+          {{ login_user }} kullanıcısının bütün anahtarları birden değişiyor; Ansible bağlantısı kopar. Anahtarı iki
+          adımda değiştirin: önce yeni anahtarı ekleyin, bir run sonra eskisini çıkarın.
+        quiet: true
+      vars:
+        current: >-
+          {{ (login_user_keys.content | default('') | b64decode).splitlines()
+             | map('regex_search', ssh_key_line) | select | map('trim') | list }}
+        new: >-
+          {{ (users_effective | selectattr('name', 'eq', login_user) | first).ssh_keys
+             | map('regex_search', ssh_key_line) | select | map('trim') | list }}
+
+- name: Ek gruplar
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: >-
+    {{ users_effective | rejectattr('state', 'eq', 'absent') | map(attribute='groups') | flatten | unique }}
+
+- name: Kullanıcılar
+  ansible.builtin.include_tasks: user.yml
+  loop: "{{ users_effective }}"
+  loop_control:
+    loop_var: u
+    label: "{{ u.name }}"

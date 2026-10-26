@@ -1,0 +1,19 @@
+---
+# Yerel kullanıcılar, sudo yetkileri ve SSH anahtarları. AWX job template'inde
+# Playbook: playbooks/users.yml
+#
+# users listesi (roles/el_users/meta/argument_specs.yml) inventory'de
+# group_vars olarak (tüm sunucular, ortam ya da rol grubu) ya da job
+# template'in extra vars'ında YAML olarak verilir; liste survey'e uygun
+# değildir. Açıklamalı örnek: examples/users.yml. Bir kişinin erişimi kaydı
+# state absent ya da disabled yapılıp bu playbook tüm sunucularda
+# çalıştırılarak kaldırılır.
+- name: Kullanıcılar
+  hosts: all
+  become: true
+  vars:
+    # Rolün şablonları dosyanın başına kimin yazdığını koyar. Job ID'si
+    # değil template adı: her run'da dosya değişmesin.
+    gaia_contract: "AWX: {{ awx_job_template_name | default('elle çalıştırıldı') }}"
+  roles:
+    - role: el_users

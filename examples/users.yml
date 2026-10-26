@@ -1,0 +1,96 @@
+---
+# el_users rolü için örnek kullanıcı listesi (playbooks/users.yml).
+#
+# Nereye konur:
+#   - Inventory'de group_vars olarak: tüm sunucular için group_vars/all/users.yml,
+#     belirli bir ortam ya da rol için o grubun group_vars dosyası.
+#   - Ya da AWX job template'inin "Extra variables" alanına bu YAML olduğu gibi
+#     yapıştırılır. Elle denemek için:
+#       ansible-playbook -i <inventory> playbooks/users.yml -e @examples/users.yml --check
+#   Liste survey'e uygun değildir.
+#
+# Genel kurallar:
+#   - Rol yalnızca bu listedeki kullanıcıları yönetir; listede hiç olmayan
+#     kullanıcılara (sistem hesapları, elle açılmışlar) dokunmaz.
+#   - Hesapların parolası yoktur; giriş yalnızca SSH anahtarıyla yapılır.
+#     sudo bu yüzden her zaman parolasızdır.
+#   - ssh_keys ve groups kesindir: sunucudaki authorized_keys dosyası ve ek
+#     gruplar tam olarak burada yazanlar olur, fazlası silinir.
+#   - Bir listeyi birden çok grup dosyasına bölmek (ör. all ve web) işe
+#     yaramaz: Ansible aynı adlı değişkeni birleştirmez, daha özel olan grubun
+#     listesi diğerini tümüyle ezer.
+#
+# Alanlar (yalnızca name zorunlu, diğerlerinin varsayılanı parantez içinde):
+#   name           Kullanıcı adı: küçük harf, rakam, _ . -; harf ya da _ ile
+#                  başlar, en fazla 32 karakter. root yönetilemez.
+#   state          present (varsayılan) hesap açık.
+#                  disabled: hesabın süresi dolmuş sayılır, giriş yapılamaz;
+#                    anahtarları ve sudo'su kaldırılır, ev dizini ve dosyaları
+#                    kalır. Geri açmak için present yapılır.
+#                  absent: açık oturumları kapatılır ve hesap silinir.
+#   comment        Açıklama, ör. ad soyad ve ekip ("").
+#   uid            Sabit kullanıcı numarası; sunucular arasında aynı olması
+#                  gerekiyorsa (NFS vb.) verilir. Verilmezse sistem seçer.
+#   groups         Ek gruplar; sunucuda yoksa oluşturulur ([]).
+#   shell          Kabuk (/bin/bash).
+#   sudo           none (varsayılan) sudo yok; all her komut; commands yalnızca
+#                  sudo_commands'taki komutlar.
+#   sudo_commands  sudo commands iken izin verilen komutlar, tam yoluyla.
+#                  Argüman yazılırsa yalnızca o argümanlarla çalışır;
+#                  yazılmazsa her argümanla.
+#   ssh_keys       SSH public key satırları ([]). Satırın başına OpenSSH
+#                  seçenekleri yazılabilir (ör. from="10.0.0.0/8").
+#   remove_home    state absent iken ev dizini de silinsin (false).
+#
+# Not: Aşağıdaki anahtarlar örnektir, gerçek anahtarlarla değiştirilmelidir.
+users:
+  # Ansible'ın (AWX machine credential'ının) bağlandığı hesap. Rol bu hesabı
+  # kapatmaz, silmez, sudo'sunu almaz ve anahtarlarının hepsini bir seferde
+  # değiştirmez. Anahtar değişimi iki run'da yapılır: önce yeni anahtar
+  # listeye eklenir, sonraki run'da eskisi çıkarılır.
+  - name: ansible
+    comment: AWX otomasyon hesabı
+    sudo: all
+    ssh_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleAwxKeyReplaceMeWithTheRealOne000000 awx@example
+
+  # Tam yetkili sistem yöneticisi; iki cihazdan girer (iki anahtar).
+  - name: yigit.basalma
+    comment: Yiğit Basalma - Sistem
+    groups: [sysadmin]
+    sudo: all
+    ssh_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleLaptopKeyReplaceMeWithTheRealOne000 yigit@laptop
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleDesktopKeyReplaceMeWithTheRealOne00 yigit@desktop
+
+  # Uygulama ekibi: yalnızca servis yönetimi ve log okuma. Anahtar yalnızca iç
+  # ağdan kabul edilir (from=).
+  - name: ayse.kaya
+    comment: Ayşe Kaya - Uygulama
+    groups: [appteam]
+    sudo: commands
+    sudo_commands:
+      - /usr/bin/systemctl restart nginx
+      - /usr/bin/systemctl status nginx
+      - /usr/bin/journalctl
+    ssh_keys:
+      - from="10.0.0.0/8" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleAyseKeyReplaceMeWithTheRealOne000 ayse@laptop
+
+  # sudo'suz, yalnızca okuma için giriş; RSA anahtarı da olur.
+  - name: can.demir
+    comment: Can Demir - Destek
+    ssh_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQExampleCanKeyReplaceMeWithTheRealOne0000000000 can@laptop
+
+  # Uzun izinde: giriş kapalı, dosyaları duruyor. Dönünce state present yapılıp
+  # anahtarı tekrar yazılır.
+  - name: zeynep.ak
+    comment: Zeynep Ak - Sistem (izinde)
+    state: disabled
+
+  # İşten ayrıldı: oturumları kapatılır, hesap ve ev dizini silinir. Kayıt tüm
+  # sunucularda silindikten sonra listeden çıkarılabilir; çıkarılmadan önce
+  # playbook her sunucuda bir kez çalışmış olmalı.
+  - name: ali.veli
+    state: absent
+    remove_home: true
