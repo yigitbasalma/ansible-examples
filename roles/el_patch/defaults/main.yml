@@ -1,0 +1,7 @@
+---
+update_scope: all
+update_packages: []
+exclude_packages: []
+reboot: never
+reboot_timeout: 900
+health_check: true

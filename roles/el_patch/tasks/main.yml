@@ -1,0 +1,151 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+- name: update_scope packages iken paket listesi verildi
+  ansible.builtin.assert:
+    that: update_scope != 'packages' or update_packages | length > 0
+    fail_msg: update_scope packages iken update_packages boş olamaz.
+    quiet: true
+
+# dnf needs-restarting bu eklenti paketinden gelir.
+- name: dnf eklentileri
+  ansible.builtin.dnf:
+    name: dnf-plugins-core
+    state: present
+  register: dnf_plugins
+
+- name: Bekleyen güncellemeler
+  ansible.builtin.command:
+    argv: "{{ check_update_argv }}"
+  register: check_update
+  changed_when: false
+  failed_when: check_update.rc not in [0, 100]
+  check_mode: false
+
+- name: Bekleyen güncellemeler listesi
+  ansible.builtin.set_fact:
+    pending_updates: >-
+      {{ check_update.stdout_lines | select('match', update_line)
+         | map('regex_replace', '^(\S+)\s+(\S+)\s+.*$', '\1 \2') | unique | list }}
+
+- name: Bekleyen güncellemeler raporu
+  ansible.builtin.debug:
+    msg: "{{ pending_updates | length }} paket ({{ update_scope }}): {{ pending_updates | join(', ') if pending_updates else '-' }}"
+
+- name: Servisler (güncelleme öncesi)
+  ansible.builtin.service_facts:
+  when: health_check
+
+# Açılışta başlayan ve şu an çalışan servisler; tek seferlik ya da
+# zamanlayıcıyla çalışan (static) servisler sayılmaz.
+- name: Güncelleme sonrası çalışması beklenen servisler
+  ansible.builtin.set_fact:
+    services_before: >-
+      {{ ansible_facts.services | dict2items
+         | selectattr('value.state', 'eq', 'running')
+         | selectattr('value.status', 'eq', 'enabled')
+         | map(attribute='key') | list }}
+  when: health_check
+
+# Hariç tutulan bir paketin yeni sürümüne bağımlı güncellemeler atlanır,
+# gerisi uygulanır; atlananlar raporda remaining. EL8/9'da best=True
+# varsayılan olduğundan skip_broken tek başına yetmez, nobest de gerekir.
+- name: Güncellemeler
+  ansible.builtin.dnf:
+    name: "{{ update_packages if update_scope == 'packages' else '*' }}"
+    state: latest
+    security: "{{ update_scope == 'security' }}"
+    exclude: "{{ exclude_packages }}"
+    update_only: true
+    skip_broken: true
+    nobest: true
+  register: update_result
+  when: pending_updates | length > 0
+
+- name: Kalan güncellemeler
+  ansible.builtin.command:
+    argv: "{{ check_update_argv }}"
+  register: check_update_after
+  changed_when: false
+  failed_when: check_update_after.rc not in [0, 100]
+  when: update_result is changed and not ansible_check_mode
+
+- name: Kalan güncellemeler listesi
+  ansible.builtin.set_fact:
+    remaining_updates: >-
+      {{ pending_updates if check_update_after is skipped
+         else check_update_after.stdout_lines | select('match', update_line)
+              | map('regex_replace', '^(\S+)\s+(\S+)\s+.*$', '\1 \2') | unique | list }}
+
+- name: Uygulanamayan güncellemeler
+  ansible.builtin.debug:
+    msg: "{{ remaining_updates | length }} paket güncellenemedi: {{ remaining_updates | join(', ') }}"
+  when:
+    - check_update_after is not skipped
+    - remaining_updates | length > 0
+
+# Check mode'da eklenti henüz kurulmadıysa komut yoktur; gereksinim
+# raporda bilinmiyor (null) görünür.
+- name: Yeniden başlatma gerekiyor mu?
+  ansible.builtin.command: dnf needs-restarting -r
+  register: needs_restarting
+  changed_when: false
+  failed_when: needs_restarting.rc not in [0, 1] or 'No such command' in needs_restarting.stderr
+  check_mode: false
+  when: not (ansible_check_mode and dnf_plugins is changed)
+
+- name: Yeniden başlatma
+  ansible.builtin.reboot:
+    reboot_timeout: "{{ reboot_timeout }}"
+    msg: Güncellemeler sonrası Ansible tarafından yeniden başlatılıyor
+  register: reboot_result
+  when:
+    - reboot == 'if_needed'
+    - needs_restarting.rc | default(0) == 1
+
+# Servisler açılışta geç kalkabilir; bir süre beklenir.
+- name: Sağlık kontrolü
+  when:
+    - health_check
+    - update_result is changed or reboot_result is changed
+  block:
+    - name: Güncelleme öncesi çalışan servisler çalışıyor
+      ansible.builtin.service_facts:
+      register: services_after
+      until: services_before | difference(running_after) | length == 0
+      retries: 12
+      delay: 10
+      vars:
+        running_after: >-
+          {{ services_after.ansible_facts.services | default({}) | dict2items
+             | selectattr('value.state', 'eq', 'running')
+             | map(attribute='key') | list }}
+  rescue:
+    - name: Çalışmayan servisler
+      ansible.builtin.fail:
+        msg: >-
+          Güncellemeden sonra çalışmayan servisler:
+          {{ services_before | difference(services_after.ansible_facts.services | dict2items
+             | selectattr('value.state', 'eq', 'running') | map(attribute='key') | list) | join(', ') }}
+
+# AWX'te job artifact'ı olarak görünür; host'lar aynı sözlükte birleşir.
+# check_mode true ise updated/rebooted "yapılacaktı" demektir.
+- name: Rapor
+  ansible.builtin.set_stats:
+    data:
+      patch_report: >-
+        {{ {inventory_hostname: {
+             'check_mode': ansible_check_mode,
+             'scope': update_scope,
+             'pending': pending_updates,
+             'remaining': remaining_updates,
+             'updated': update_result is changed,
+             'reboot_required': none if needs_restarting is skipped
+                                else needs_restarting.rc == 1 and reboot_result is not changed,
+             'rebooted': reboot_result is changed}} }}

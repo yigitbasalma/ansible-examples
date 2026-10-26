@@ -1,0 +1,22 @@
+---
+# Güncellemeleri uygular. AWX job template'inde Playbook: playbooks/patch.yml
+#
+# Rolün parametreleri (roles/el_patch/meta/argument_specs.yml) extra vars ya
+# da survey ile verilir: update_scope, update_packages, exclude_packages,
+# reboot, reboot_timeout, health_check. Rapor modu için job template'te
+# "Check" seçilir.
+#
+# Dalgalar: patch_batch host'ları gruplar halinde işler (ör. 1, 25%);
+# önce test sonra prod gibi ayrımlar inventory grubu ve "Limit" ile, ya da
+# AWX workflow'unda art arda job'larla yapılır. patch_max_fail_percentage bir
+# gruptaki başarısız host oranı bunu aşarsa sonraki grupları durdurur;
+# varsayılan 100 durdurmaz. Ansible bir gruptaki host'ların hepsi
+# başarısız olursa eşikten bağımsız durur; patch_batch 1 iken tek hata
+# yeter.
+- name: Güncelleme
+  hosts: all
+  become: true
+  serial: "{{ patch_batch | default('100%') }}"
+  max_fail_percentage: "{{ patch_max_fail_percentage | default(100) }}"
+  roles:
+    - role: el_patch

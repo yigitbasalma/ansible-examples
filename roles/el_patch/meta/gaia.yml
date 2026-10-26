@@ -1,0 +1,4 @@
+# Gaia'nın argument_specs'e eklediği bilgiler (AnsibleRoleSource: extra).
+# Check mode rapor modudur: bekleyen güncellemeler ve reboot gereksinimi
+# listelenir, hiçbir şey kurulmaz ve sunucu yeniden başlatılmaz.
+checkMode: supported

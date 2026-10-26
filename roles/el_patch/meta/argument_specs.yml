@@ -1,0 +1,40 @@
+---
+argument_specs:
+  main:
+    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuya güncellemeleri uygular, gerekirse yeniden başlatır
+    description:
+      - Bekleyen güncellemeleri listeler, seçilen kapsamda uygular, yeniden başlatma gereksinimini tespit eder
+        ve güncellemeden önce çalışan servislerin sonra da çalıştığını doğrular.
+      - Sunucuda tanımlı repoları kullanır; repo yapılandırması bu rolün işi değildir.
+      - Check mode rapor modudur; sonuç AWX'te job artifact'ı (patch_report) olarak da görünür.
+    options:
+      update_scope:
+        type: str
+        default: all
+        choices: [all, security, packages]
+        description: >-
+          all tüm güncellemeleri, security yalnızca güvenlik güncellemelerini, packages yalnızca update_packages'taki
+          paketleri günceller. Kurulu olmayan paket kurulmaz.
+      update_packages:
+        type: list
+        elements: str
+        default: []
+        description: update_scope packages iken güncellenecek paketler (ör. openssl, "nginx*").
+      exclude_packages:
+        type: list
+        elements: str
+        default: []
+        description: Güncellemeden hariç tutulacak paketler (ör. "kernel*", "java-*").
+      reboot:
+        type: str
+        default: never
+        choices: [never, if_needed]
+        description: if_needed, güncellemeden sonra yeniden başlatma gerekiyorsa sunucuyu yeniden başlatır. never yalnızca raporlar.
+      reboot_timeout:
+        type: int
+        default: 900
+        description: Yeniden başlatılan sunucunun geri gelmesi için beklenecek en uzun süre (saniye).
+      health_check:
+        type: bool
+        default: true
+        description: Güncellemeden önce çalışan ve açılışta başlayan servisler sonra da çalışmıyorsa sunucu başarısız sayılır.

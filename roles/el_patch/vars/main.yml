@@ -1,0 +1,16 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]
+
+# Güncellemeden önce ve sonra aynı sorgu: kapsam ve hariç tutmalar dahil.
+check_update_argv: >-
+  {{ ['dnf', '-q', 'check-update']
+     + (['--security'] if update_scope == 'security' else [])
+     + exclude_packages | map('regex_replace', '^', '--exclude=') | list
+     + (update_packages if update_scope == 'packages' else []) }}
+
+# check-update satırları "ad.mimari sürüm repo"; girintili satırlar
+# (Obsoleting Packages altındaki eskiyenler) alınmaz.
+update_line: '^\S+\.\S+\s+\S+\s+\S+\s*$'
