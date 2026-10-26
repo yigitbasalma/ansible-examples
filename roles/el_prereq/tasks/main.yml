@@ -10,6 +10,10 @@
 # Her bileşen kendi dosyasında ve kendi manage_* anahtarıyla. Yeni bir
 # bileşen için: tasks/<ad>.yml, defaults'ta manage_<ad> ve parametreleri,
 # meta/argument_specs.yml'de aynıları, buraya bir import.
+- name: SELinux
+  ansible.builtin.import_tasks: selinux.yml
+  when: manage_selinux | bool
+
 - name: NTP
   ansible.builtin.import_tasks: ntp.yml
   when: manage_ntp | bool

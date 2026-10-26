@@ -1,0 +1,92 @@
+---
+# el_prereq/tasks/selinux.yml ile aynı tutulur: iki rol aynı selinux_state
+# değeriyle aynı sonucu verir, birbirini geri almaz.
+#
+# ansible.posix.selinux EL8'de çalışmaz (ansible-core 2.21 Python >= 3.9
+# ister, libselinux bağlaması yalnızca platform-python 3.6 için var);
+# config, grubby ve setenforce doğrudan kullanılır.
+- name: SELinux araçları
+  ansible.builtin.dnf:
+    name: "{{ ['libselinux-utils', 'grubby'] + ([] if selinux_state == 'disabled' else ['selinux-policy-targeted']) }}"
+    state: present
+  register: selinux_packages
+
+# Check mode'da paketler henüz kurulmadıysa getenforce ve grubby yoktur;
+# sapma zaten paket task'ında görünür.
+- name: SELinux modu
+  when: not (ansible_check_mode and selinux_packages is changed)
+  block:
+    - name: SELinux şu anki modu
+      ansible.builtin.command: getenforce
+      register: selinux_current
+      changed_when: false
+      check_mode: false
+
+    - name: SELinux modu (kalıcı)
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^\s*{{ item.key }}\s*='
+        line: "{{ item.key }}={{ item.value }}"
+        create: true
+        mode: "0644"
+      loop:
+        - { key: SELINUX, value: "{{ selinux_state }}" }
+        - { key: SELINUXTYPE, value: targeted }
+      loop_control:
+        label: "{{ item.key }}"
+
+    # EL9'da config'teki disabled SELinux'u tam kapatmaz (çekirdek SELinux
+    # açık, politikasız açılır); Red Hat'in önerdiği yol selinux=0 çekirdek
+    # parametresidir. EL8'de de aynı parametre kullanılır.
+    - name: Çekirdek parametreleri
+      ansible.builtin.command: grubby --info=ALL
+      register: selinux_grubby
+      changed_when: false
+      check_mode: false
+
+    - name: Çekirdek parametresi selinux=0
+      ansible.builtin.command: grubby --update-kernel=ALL --args=selinux=0
+      changed_when: true
+      when:
+        - selinux_state == 'disabled'
+        - kernel_args | reject('search', '(^|\s|")selinux=0(\s|"|$)') | list | length > 0
+      vars:
+        kernel_args: "{{ selinux_grubby.stdout_lines | select('match', '^args=') | list }}"
+
+    - name: Çekirdek parametresi selinux=0 kaldırılsın
+      ansible.builtin.command: grubby --update-kernel=ALL --remove-args=selinux
+      changed_when: true
+      when:
+        - selinux_state != 'disabled'
+        - kernel_args | select('search', '(^|\s|")selinux=') | list | length > 0
+      vars:
+        kernel_args: "{{ selinux_grubby.stdout_lines | select('match', '^args=') | list }}"
+
+    # Çalışan sistem kapatılamaz, ancak permissive yapılabilir; disabled
+    # yeniden başlatmadan sonra geçerli olur.
+    - name: SELinux modu (hemen)
+      ansible.builtin.command: setenforce {{ 'Permissive' if selinux_state == 'disabled' else selinux_state | capitalize }}
+      changed_when: true
+      when:
+        - selinux_current.stdout != 'Disabled'
+        - selinux_current.stdout != ('Permissive' if selinux_state == 'disabled' else selinux_state | capitalize)
+
+    # Kapalıyken oluşan dosyaların etiketi yoktur; açılırken bütün dosya
+    # sistemi yeniden etiketlenmezse servisler engellenir. Etiketleme ilk
+    # açılışta yapılır ve dosya silinir.
+    - name: SELinux açılırken yeniden etiketleme
+      ansible.builtin.command: touch /.autorelabel
+      args:
+        creates: /.autorelabel
+      when:
+        - selinux_state != 'disabled'
+        - selinux_current.stdout == 'Disabled'
+
+    - name: Yeniden başlatma gerekiyor
+      ansible.builtin.debug:
+        msg: >-
+          SELinux şu an {{ selinux_current.stdout }}; {{ selinux_state }} durumu yeniden başlatmadan sonra tam geçerli
+          olur{{ ' (ilk açılışta dosya sistemi yeniden etiketlenir, birkaç dakika sürebilir)' if selinux_current.stdout == 'Disabled' else '' }}.
+      when: >-
+        (selinux_state == 'disabled' and selinux_current.stdout != 'Disabled')
+        or (selinux_state != 'disabled' and selinux_current.stdout == 'Disabled')

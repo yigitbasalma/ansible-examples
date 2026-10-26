@@ -1,11 +1,23 @@
 ---
 argument_specs:
   main:
-    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuyu kullanıma hazırlar (NTP, rsyslog)
+    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuyu kullanıma hazırlar (SELinux, NTP, rsyslog)
     description:
       - Makine hazırlığının bileşenleri; her biri kendi manage_* anahtarıyla açılıp kapanır.
       - Senkronizasyon durumu AWX'te job artifact'ı (prereq_report) olarak da görünür.
     options:
+      manage_selinux:
+        type: bool
+        default: true
+        description: SELinux durumu yönetilsin (ilk bileşen).
+      selinux_state:
+        type: str
+        default: disabled
+        choices: [disabled, permissive, enforcing]
+        description: >-
+          SELinux durumu. el_hardening aynı parametreyi kullanır; iki role aynı değer verilmeli. disabled
+          /etc/selinux/config ve selinux=0 çekirdek parametresiyle kapatır; yeniden başlatmaya kadar permissive olur.
+          Kapalıdan açılırken ilk açılışta dosya sistemi yeniden etiketlenir.
       manage_ntp:
         type: bool
         default: true

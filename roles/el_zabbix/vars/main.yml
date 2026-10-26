@@ -12,3 +12,6 @@ zabbix_effective_hostname: "{{ zabbix_hostname or inventory_hostname }}"
 zabbix_effective_metadata: >-
   {{ zabbix_host_metadata or (ansible_facts.distribution | lower ~ '|' ~ ansible_facts.distribution_major_version) }}
 zabbix_psk_enabled: "{{ zabbix_tls_psk_identity | string | length > 0 and zabbix_tls_psk | string | length > 0 }}"
+
+# Port aralıklarını kaplayan, belirli bir servise ait olmayan SELinux tipleri.
+selinux_generic_port_types: [port_t, unreserved_port_t, reserved_port_t, hi_reserved_port_t, ephemeral_port_t]

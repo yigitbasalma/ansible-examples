@@ -76,6 +76,9 @@
         validate: zabbix_agentd -c %s -p
       register: zabbix_conf
 
+    - name: SELinux
+      ansible.builtin.import_tasks: selinux.yml
+
     - name: Ajan açılışta başlasın ve çalışsın
       ansible.builtin.systemd_service:
         name: zabbix-agent
@@ -94,13 +97,27 @@
     - name: Servisler
       ansible.builtin.service_facts:
 
+    # ansible.posix.firewalld OL8'de çalışmaz: firewalld'nin Python
+    # bağlaması yalnızca platform-python (3.6) için var.
     - name: Güvenlik duvarı (firewalld çalışıyorsa)
-      ansible.posix.firewalld:
-        port: "{{ zabbix_listen_port }}/tcp"
-        permanent: true
-        immediate: true
-        state: enabled
       when: ansible_facts.services['firewalld.service'].state | default('') == 'running'
+      block:
+        - name: Güvenlik duvarında port açık mı? (çalışan ve kalıcı ayar)
+          ansible.builtin.command:
+            argv: "{{ ['firewall-cmd'] + item + ['--query-port=' ~ zabbix_listen_port ~ '/tcp'] }}"
+          loop: [[], [--permanent]]
+          register: zabbix_firewall
+          changed_when: false
+          failed_when: zabbix_firewall.rc not in [0, 1]
+          check_mode: false
+
+        - name: Güvenlik duvarında port açılsın
+          ansible.builtin.command:
+            argv: "{{ ['firewall-cmd'] + item.item + ['--add-port=' ~ zabbix_listen_port ~ '/tcp'] }}"
+          loop: "{{ zabbix_firewall.results | selectattr('rc', 'eq', 1) | list }}"
+          loop_control:
+            label: "{{ 'kalıcı' if item.item else 'çalışan' }}"
+          changed_when: true
 
 - name: Zabbix kaydı
   ansible.builtin.debug:

@@ -1,0 +1,7 @@
+; Gaia'nın Zabbix ajanı için SELinux ekleri (el_zabbix rolü yükler).
+;
+; Paket envanteri (system.sw.packages, system.sw.packages.get): ajan rpm'i
+; kendi alanında (zabbix_agent_t) çalıştırır ve rpm veritabanını okur.
+; Varsayılan politika bunu engeller ve açan bir boolean yoktur.
+(allow zabbix_agent_t rpm_exec_t (file (execute execute_no_trans map)))
+(allow zabbix_agent_t rpm_var_lib_t (file (read open lock map)))

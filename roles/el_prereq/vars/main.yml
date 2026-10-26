@@ -3,3 +3,17 @@
 supported_platforms:
   OracleLinux: ["8"]
   Rocky: ["9"]
+
+# rsyslog'un (syslogd_t) TCP ile bağlanabildiği port tipleri (EL8 ve EL9
+# politikası); bu tiplerdeki portlara etiket gerekmez.
+rsyslog_selinux_allowed_port_types:
+  - syslogd_port_t
+  - syslog_tls_port_t
+  - rsh_port_t
+  - http_port_t
+  - mysqld_port_t
+  - postgresql_port_t
+  - wap_wsp_port_t
+
+# Port aralıklarını kaplayan, belirli bir servise ait olmayan SELinux tipleri.
+selinux_generic_port_types: [port_t, unreserved_port_t, reserved_port_t, hi_reserved_port_t, ephemeral_port_t]

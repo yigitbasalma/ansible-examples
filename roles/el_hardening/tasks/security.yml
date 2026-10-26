@@ -1,46 +1,6 @@
 ---
-- name: SELinux politikası ve araçları
-  ansible.builtin.dnf:
-    name: [selinux-policy-targeted, libselinux-utils]
-    state: present
-  register: selinux_packages
-
-# ansible.posix.selinux EL8'de çalışmaz: ansible-core 2.21 Python >= 3.9
-# ister, libselinux bağlaması ise yalnızca platform-python (3.6) için var.
-# İki sürümde de aynı yol izlenir.
-# Check mode'da paketler henüz kurulmadıysa config ve getenforce yoktur;
-# sapma zaten paket task'ında görünür.
-- name: SELinux modu
-  when: not (ansible_check_mode and selinux_packages is changed)
-  block:
-    - name: SELinux modu (kalıcı)
-      ansible.builtin.lineinfile:
-        path: /etc/selinux/config
-        regexp: '^\s*{{ item.key }}\s*='
-        line: "{{ item.key }}={{ item.value }}"
-      loop:
-        - { key: SELINUX, value: "{{ selinux_state }}" }
-        - { key: SELINUXTYPE, value: targeted }
-      loop_control:
-        label: "{{ item.key }}"
-
-    - name: SELinux şu anki modu
-      ansible.builtin.command: getenforce
-      register: selinux_current
-      changed_when: false
-      check_mode: false
-
-    # SELinux kapalıysa (Disabled) açılması yeniden başlatma ister; rol
-    # başlatmaz, yalnızca uyarır.
-    - name: SELinux modu (hemen)
-      ansible.builtin.command: setenforce {{ selinux_state | capitalize }}
-      when: selinux_current.stdout not in ['Disabled', selinux_state | capitalize]
-      changed_when: true
-
-    - name: SELinux kapalı, yeniden başlatma gerekiyor
-      ansible.builtin.debug:
-        msg: SELinux şu an kapalı (Disabled). {{ selinux_state }} modu yeniden başlatmadan sonra geçerli olur.
-      when: selinux_current.stdout == 'Disabled'
+- name: SELinux
+  ansible.builtin.import_tasks: selinux.yml
 
 # Servisler yeni politikayı yeniden başlatılınca alır.
 - name: Kripto politikası

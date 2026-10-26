@@ -1,4 +1,7 @@
 ---
+manage_selinux: true
+selinux_state: disabled
+
 manage_ntp: true
 ntp_servers: []
 ntp_pool: pool.ntp.org

@@ -4,6 +4,8 @@ argument_specs:
     short_description: Zabbix ajanını (7.0 LTS) kurar ve Zabbix sunucusuna bağlar
     description:
       - zabbix-agent kurulur; pasif (sunucu sorar) ve aktif (ajan gönderir) kontroller zabbix_server'a açılır.
+      - SELinux açıksa ajanın paket envanterini (system.sw.packages*) okuyabilmesi için küçük bir politika modülü
+        (gaia_zabbix_agent) yüklenir. Ajanın standart dışı portlara web/TCP kontrolü yapmasına izin verilmez.
       - Sunucuya otomatik kayıt (autoregistration) için HostMetadata yazılır. Inventory'de grup ya da host
         değişkeni olarak zabbix_host_metadata verilmemişse "<dağıtım>|<ana sürüm>" kullanılır (ör. rocky|9).
     options:
@@ -19,7 +21,9 @@ argument_specs:
       zabbix_listen_port:
         type: int
         default: 10050
-        description: Ajanın pasif kontroller için dinlediği port; firewalld çalışıyorsa açılır.
+        description: >-
+          Ajanın pasif kontroller için dinlediği port; firewalld çalışıyorsa açılır. SELinux açıksa ve 10050 değilse
+          port ajana etiketlenir; başka bir servise ait bir port seçilemez.
       zabbix_hostname:
         type: str
         default: ""

@@ -4,7 +4,7 @@ disabled_kernel_modules: [cramfs, freevxfs, jffs2, hfs, hfsplus, squashfs, udf, 
 secure_mounts: [/dev/shm, /tmp, /var/tmp]
 remove_packages: [telnet-server, tftp-server, vsftpd, xinetd, ypserv, rsh-server, talk-server]
 disable_services: [avahi-daemon, cups]
-selinux_state: enforcing
+selinux_state: disabled
 crypto_policy: DEFAULT
 umask: "027"
 pass_max_days: 90

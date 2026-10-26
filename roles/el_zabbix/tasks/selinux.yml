@@ -1,0 +1,81 @@
+---
+# ansible_facts.selinux OL8'de okunamaz (python3.12 için libselinux yok).
+- name: SELinux durumu
+  ansible.builtin.command: getenforce
+  register: zabbix_selinux
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: SELinux ayarları
+  when: zabbix_selinux.rc == 0 and zabbix_selinux.stdout != 'Disabled'
+  block:
+    - name: SELinux modül dizini
+      ansible.builtin.file:
+        path: /usr/share/selinux/packages/gaia
+        state: directory
+        mode: "0755"
+
+    - name: Paket envanteri için SELinux modülü
+      ansible.builtin.copy:
+        src: gaia_zabbix_agent.cil
+        dest: /usr/share/selinux/packages/gaia/gaia_zabbix_agent.cil
+        mode: "0644"
+      register: zabbix_selinux_module
+
+    - name: Yüklü SELinux modülleri
+      ansible.builtin.command: semodule -l
+      register: zabbix_semodules
+      changed_when: false
+      check_mode: false
+
+    - name: Paket envanteri için SELinux modülü yüklensin
+      ansible.builtin.command: semodule -i /usr/share/selinux/packages/gaia/gaia_zabbix_agent.cil
+      changed_when: true
+      when: >-
+        zabbix_selinux_module is changed
+        or 'gaia_zabbix_agent' not in zabbix_semodules.stdout_lines | map('split') | map('first')
+
+    # Politika ajana yalnızca 10050'yi verir; başka port etiketlenmezse ajan
+    # dinleyemez.
+    - name: Dinleme portu
+      when: zabbix_listen_port != 10050
+      block:
+        - name: SELinux araçları (semanage)
+          ansible.builtin.dnf:
+            name: policycoreutils-python-utils
+            state: present
+          register: zabbix_semanage_package
+
+        # Check mode'da semanage henüz kurulmadıysa sorgulanamaz.
+        - name: Dinleme portunun SELinux etiketleri
+          ansible.builtin.shell: >-
+            set -o pipefail;
+            semanage port -l | awk -v p={{ zabbix_listen_port }} '$2 == "tcp" {
+              for (i = 3; i <= NF; i++) { gsub(",", "", $i); n = split($i, r, "-");
+                if ((n == 1 && r[1] == p) || (n == 2 && p >= r[1] + 0 && p <= r[2] + 0)) print $1 } }'
+          register: zabbix_port_types
+          changed_when: false
+          check_mode: false
+          when: not (ansible_check_mode and zabbix_semanage_package is changed)
+
+        # Genel tipler (unreserved_port_t vb.) bir aralığı kaplar; tek port
+        # onların üstüne etiketlenebilir. Başka bir servisin portu alınmaz.
+        - name: Dinleme portu başka bir servise ait değil
+          ansible.builtin.assert:
+            that: >-
+              'zabbix_agent_port_t' in types or types | difference(selinux_generic_port_types) | length == 0
+            fail_msg: >-
+              tcp/{{ zabbix_listen_port }} SELinux'ta başka bir servise ait ({{ types | join(', ') }});
+              zabbix_listen_port için başka bir port seçin.
+            quiet: true
+          vars:
+            types: "{{ zabbix_port_types.stdout_lines | default([]) }}"
+          when: zabbix_port_types is not skipped
+
+        - name: Dinleme portu Zabbix ajanına etiketlensin
+          ansible.builtin.command: semanage port -a -t zabbix_agent_port_t -p tcp {{ zabbix_listen_port }}
+          changed_when: true
+          when:
+            - zabbix_port_types is not skipped
+            - "'zabbix_agent_port_t' not in zabbix_port_types.stdout_lines"
