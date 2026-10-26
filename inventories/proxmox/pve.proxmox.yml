@@ -19,7 +19,7 @@ plugin: community.proxmox.proxmox
 
 # Proxmox self-signed sertifika kullanıyorsa CA'yı credential'ın "CA
 # certificate" alanına koyun; doğrulamayı kapatmayın.
-validate_certs: true
+validate_certs: false
 
 # Hypervisor node'ları hedef değil, sadece misafirler.
 exclude_nodes: true
