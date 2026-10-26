@@ -1,0 +1,100 @@
+---
+- name: chrony
+  ansible.builtin.dnf:
+    name: chrony
+    state: present
+  register: chrony_package
+
+- name: Saat dilimi dosyası
+  ansible.builtin.stat:
+    path: /usr/share/zoneinfo/{{ timezone }}
+  register: zoneinfo
+
+- name: Saat dilimi geçerli mi?
+  ansible.builtin.assert:
+    that: zoneinfo.stat.exists and zoneinfo.stat.isreg
+    fail_msg: Saat dilimi bulunamadı ({{ timezone }}); /usr/share/zoneinfo altındaki bir ad verin.
+    quiet: true
+
+# timedatectl set-timezone ile aynı bağ.
+- name: Saat dilimi
+  ansible.builtin.file:
+    src: ../usr/share/zoneinfo/{{ timezone }}
+    dest: /etc/localtime
+    state: link
+    force: true
+
+- name: chrony ayarları
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    mode: "0644"
+  register: chrony_conf
+
+# Check mode'da chrony henüz kurulmadıysa servis ve chronyc yoktur; sapma
+# zaten paket task'ında görünür.
+- name: chronyd
+  when: not (ansible_check_mode and chrony_package is changed)
+  block:
+    - name: chronyd açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: chronyd
+        enabled: true
+        state: started
+      register: chronyd_started
+
+    # Handler değil: aşağıdaki doğrulama yeni ayarla yapılmalı.
+    - name: chronyd yeni ayarla yeniden başlasın
+      ansible.builtin.systemd_service:
+        name: chronyd
+        state: restarted
+      when: chrony_conf is changed and chronyd_started is not changed
+
+    - name: Saat senkron mu?
+      ansible.builtin.command: chronyc waitsync 12 {{ ntp_max_offset_ms / 1000 }} 0 5
+      register: ntp_sync
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # CSV alanları: refid, kaynak, stratum, referans zamanı, sistem saati
+    # sapması (sn), ..., leap durumu (sonuncu).
+    - name: Senkronizasyon durumu
+      ansible.builtin.command: chronyc -n -c tracking
+      register: ntp_tracking
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: NTP raporu
+      ansible.builtin.set_fact:
+        ntp_report:
+          synced: "{{ ntp_sync.rc == 0 }}"
+          source: "{{ tracking[1] | default('') }}"
+          stratum: "{{ tracking[2] | default('') }}"
+          offset_ms: "{{ ((tracking[4] | default(0) | float) * 1000) | round(3) }}"
+          leap: "{{ tracking[-1] | default('') }}"
+      vars:
+        tracking: "{{ ntp_tracking.stdout.split(',') if ntp_tracking.rc == 0 else [] }}"
+
+    - name: NTP durumu
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Senkron' if ntp_report.synced else 'Senkron değil' }}: kaynak {{ ntp_report.source or '-' }},
+          stratum {{ ntp_report.stratum or '-' }}, sapma {{ ntp_report.offset_ms }} ms, leap {{ ntp_report.leap or '-' }}
+
+    # Check mode rapordur; sunucuyu başarısız saymaz.
+    - name: Saat senkron ve sapma eşik altında
+      ansible.builtin.assert:
+        that: ntp_report.synced
+        fail_msg: >-
+          Saat 60 saniyede senkron olmadı ya da sapma {{ ntp_max_offset_ms }} ms'yi aşıyor
+          ({{ ntp_sync.stdout_lines | last | default(ntp_sync.stderr) }}).
+        quiet: true
+      when: ntp_verify | bool and not ansible_check_mode
+
+    # AWX'te job artifact'ı olarak görünür; host'lar aynı sözlükte birleşir.
+    - name: Rapor
+      ansible.builtin.set_stats:
+        data:
+          prereq_report: "{{ {inventory_hostname: {'ntp': ntp_report}} }}"

@@ -9,8 +9,8 @@ supported_platforms:
 # Dosyada diğerlerinden önce yazılır: forwarding değişince kernel
 # conf.all.accept_redirects'i yeniden ayarlar.
 sysctl_forwarding:
-  net.ipv4.ip_forward: "{{ ip_forward | ternary(1, 0) }}"
-  net.ipv6.conf.all.forwarding: "{{ ip_forward | ternary(1, 0) }}"
+  net.ipv4.ip_forward: "{{ ip_forward | bool | ternary(1, 0) }}"
+  net.ipv6.conf.all.forwarding: "{{ ip_forward | bool | ternary(1, 0) }}"
 
 sysctl_baseline:
   net.ipv4.conf.all.send_redirects: 0

@@ -1,0 +1,69 @@
+---
+argument_specs:
+  main:
+    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuyu kullanıma hazırlar (NTP, rsyslog)
+    description:
+      - Makine hazırlığının bileşenleri; her biri kendi manage_* anahtarıyla açılıp kapanır.
+      - Senkronizasyon durumu AWX'te job artifact'ı (prereq_report) olarak da görünür.
+    options:
+      manage_ntp:
+        type: bool
+        default: true
+        description: chrony ile saat senkronizasyonu ve saat dilimi yönetilsin.
+      ntp_servers:
+        type: list
+        elements: str
+        default: []
+        description: Kurumun NTP sunucuları. Boşsa ntp_pool kullanılır.
+      ntp_pool:
+        type: str
+        default: pool.ntp.org
+        description: ntp_servers boşken kullanılan NTP havuzu.
+      timezone:
+        type: str
+        default: Europe/Istanbul
+        description: Saat dilimi (/usr/share/zoneinfo altındaki ad, ör. UTC, Europe/Istanbul).
+      ntp_verify:
+        type: bool
+        default: true
+        description: Saat 60 saniye içinde senkron olmazsa ya da sapma ntp_max_offset_ms'i aşarsa sunucu başarısız sayılsın.
+      ntp_max_offset_ms:
+        type: int
+        default: 100
+        description: Kabul edilen en büyük saat sapması (milisaniye).
+      manage_rsyslog:
+        type: bool
+        default: true
+        description: rsyslog kurulu ve çalışır olsun; rsyslog_remote_host verilmişse loglar oraya iletilsin.
+      rsyslog_remote_host:
+        type: str
+        default: ""
+        description: Merkezi log sunucusu / SIEM. Boşsa iletim yapılmaz (önceden yazılmış iletim ayarı kaldırılır).
+      rsyslog_remote_port:
+        type: int
+        default: 514
+        description: Merkezi log sunucusunun portu. TLS ile genelde 6514.
+      rsyslog_remote_protocol:
+        type: str
+        default: tcp
+        choices: [tcp, udp]
+        description: İletim protokolü. udp'de log kaybı olabilir ve TLS kullanılamaz.
+      rsyslog_format:
+        type: str
+        default: forward
+        choices: [forward, rfc5424]
+        description: >-
+          İletilen logların biçimi. forward klasik syslog başlığıdır ama zaman damgası saat dilimiyle (RFC3339) gider;
+          rfc5424 yapılandırılmış syslog'dur. SIEM'in beklediği seçilir.
+      rsyslog_tls:
+        type: bool
+        default: false
+        description: İletim TLS ile şifrelensin; sunucu sertifikasındaki ad rsyslog_remote_host olmalı.
+      rsyslog_tls_ca_file:
+        type: path
+        default: /etc/pki/tls/certs/rsyslog-ca.pem
+        description: Log sunucusunun sertifikasını imzalayan CA (sunucuda bulunmalı; rol dağıtmaz).
+      rsyslog_queue_max_disk_space:
+        type: str
+        default: 1g
+        description: Log sunucusuna ulaşılamazken loglar diskte bu boyuta kadar biriktirilir (ör. 500m, 2g).

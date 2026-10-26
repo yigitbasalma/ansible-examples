@@ -1,0 +1,67 @@
+---
+- name: TLS yalnızca tcp ile
+  ansible.builtin.assert:
+    that: not (rsyslog_tls | bool and rsyslog_remote_protocol == 'udp')
+    fail_msg: rsyslog_tls udp ile kullanılamaz; rsyslog_remote_protocol tcp olmalı.
+    quiet: true
+
+- name: rsyslog
+  ansible.builtin.dnf:
+    name: "{{ ['rsyslog'] + (['rsyslog-gnutls'] if rsyslog_tls | bool else []) }}"
+    state: present
+  register: rsyslog_packages
+
+- name: TLS CA dosyası
+  ansible.builtin.stat:
+    path: "{{ rsyslog_tls_ca_file }}"
+  register: rsyslog_ca
+  when: rsyslog_tls | bool and rsyslog_remote_host | length > 0
+
+- name: TLS CA dosyası sunucuda var mı?
+  ansible.builtin.assert:
+    that: rsyslog_ca.stat.exists
+    fail_msg: rsyslog_tls açık ama CA dosyası yok ({{ rsyslog_tls_ca_file }}); rol CA dağıtmaz.
+    quiet: true
+  when: rsyslog_ca is not skipped
+
+- name: Merkezi log sunucusuna iletim
+  ansible.builtin.template:
+    src: rsyslog-forward.conf.j2
+    dest: /etc/rsyslog.d/60-gaia-forward.conf
+    mode: "0644"
+    validate: rsyslogd -N1 -f %s
+  register: rsyslog_forward
+  when: rsyslog_remote_host | length > 0
+
+- name: İletim kapalı
+  ansible.builtin.file:
+    path: /etc/rsyslog.d/60-gaia-forward.conf
+    state: absent
+  register: rsyslog_forward_removed
+  when: rsyslog_remote_host | length == 0
+
+# Check mode'da rsyslog henüz kurulmadıysa servis yoktur.
+- name: rsyslog servisi
+  when: not (ansible_check_mode and rsyslog_packages is changed)
+  block:
+    - name: rsyslog açılışta başlasın ve çalışsın
+      ansible.builtin.systemd_service:
+        name: rsyslog
+        enabled: true
+        state: started
+      register: rsyslog_started
+
+    # Tüm ayar (rsyslog.conf ve rsyslog.d) geçerli değilse yeniden
+    # başlatılmaz; rsyslog'un reload'u yoktur.
+    - name: rsyslog ayarları geçerli mi?
+      ansible.builtin.command: rsyslogd -N1
+      changed_when: false
+      when: rsyslog_forward is changed or rsyslog_forward_removed is changed
+
+    - name: rsyslog yeni ayarla yeniden başlasın
+      ansible.builtin.systemd_service:
+        name: rsyslog
+        state: restarted
+      when:
+        - rsyslog_forward is changed or rsyslog_forward_removed is changed
+        - rsyslog_started is not changed

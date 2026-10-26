@@ -1,0 +1,16 @@
+# Gaia'nın yazdığı chrony ayarları ({{ gaia_contract }}); elle
+# değiştirilirse bir sonraki run geri alır.
+{% for server in ntp_servers %}
+server {{ server }} iburst
+{% else %}
+pool {{ ntp_pool }} iburst
+{% endfor %}
+
+# İlk üç güncellemede 1 saniyeden büyük sapma kaydırılmadan, bir kerede
+# düzeltilir; sonrasında saat yavaşça yaklaştırılır.
+makestep 1.0 3
+driftfile /var/lib/chrony/drift
+rtcsync
+keyfile /etc/chrony.keys
+leapsectz right/UTC
+logdir /var/log/chrony

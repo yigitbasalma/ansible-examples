@@ -1,0 +1,6 @@
+# Gaia'nın argument_specs'e eklediği bilgiler (AnsibleRoleSource: extra).
+checkMode: supported
+params:
+  timezone: { gaia: { pattern: '^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$' } }
+  rsyslog_remote_host: { gaia: { pattern: '^([a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?)?$' } }
+  rsyslog_queue_max_disk_space: { gaia: { pattern: '^[1-9][0-9]*[kmg]$' } }

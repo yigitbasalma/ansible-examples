@@ -12,7 +12,7 @@
 # kullanıcı hedefte okunur (sudo ile SUDO_USER, değilse fact'lerin kullanıcısı).
 - name: root girişi kapatılırken Ansible root ile bağlanmıyor
   ansible.builtin.assert:
-    that: not (ssh_hardening and ssh_root_login == 'no' and login_user == 'root')
+    that: not (ssh_hardening | bool and ssh_root_login == 'no' and login_user == 'root')
     fail_msg: ssh_root_login "no" iken Ansible root ile bağlanıyor; bir sonraki run'da sunucuya erişilemez.
     quiet: true
   vars:
@@ -35,4 +35,4 @@
 
 - name: sshd
   ansible.builtin.import_tasks: ssh.yml
-  when: ssh_hardening
+  when: ssh_hardening | bool

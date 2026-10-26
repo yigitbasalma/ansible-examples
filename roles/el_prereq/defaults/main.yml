@@ -1,0 +1,16 @@
+---
+manage_ntp: true
+ntp_servers: []
+ntp_pool: pool.ntp.org
+timezone: Europe/Istanbul
+ntp_verify: true
+ntp_max_offset_ms: 100
+
+manage_rsyslog: true
+rsyslog_remote_host: ""
+rsyslog_remote_port: 514
+rsyslog_remote_protocol: tcp
+rsyslog_format: forward
+rsyslog_tls: false
+rsyslog_tls_ca_file: /etc/pki/tls/certs/rsyslog-ca.pem
+rsyslog_queue_max_disk_space: 1g

@@ -1,0 +1,19 @@
+---
+# Makine hazırlığı (NTP, rsyslog). AWX job template'inde
+# Playbook: playbooks/prereq.yml
+#
+# Rolün parametreleri (roles/el_prereq/meta/argument_specs.yml) extra vars
+# ya da survey ile verilir: ntp_servers, timezone, rsyslog_remote_host,
+# rsyslog_remote_port, rsyslog_tls, ... Bileşenler manage_ntp ve
+# manage_rsyslog ile tek tek kapatılabilir.
+# Hedef host'lar inventory ve job template'in "Limit" alanıyla seçilir.
+- name: Makine hazırlığı
+  hosts: all
+  become: true
+  vars:
+    # Rolün şablonları dosyanın başına kimin yazdığını koyar. Job ID'si
+    # değil template adı: her run'da dosya değişip servisler yeniden
+    # başlamasın.
+    gaia_contract: "AWX: {{ awx_job_template_name | default('elle çalıştırıldı') }}"
+  roles:
+    - role: el_prereq

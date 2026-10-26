@@ -40,7 +40,7 @@
 
 - name: Servisler (güncelleme öncesi)
   ansible.builtin.service_facts:
-  when: health_check
+  when: health_check | bool
 
 # Açılışta başlayan ve şu an çalışan servisler; tek seferlik ya da
 # zamanlayıcıyla çalışan (static) servisler sayılmaz.
@@ -51,7 +51,7 @@
          | selectattr('value.state', 'eq', 'running')
          | selectattr('value.status', 'eq', 'enabled')
          | map(attribute='key') | list }}
-  when: health_check
+  when: health_check | bool
 
 # Hariç tutulan bir paketin yeni sürümüne bağımlı güncellemeler atlanır,
 # gerisi uygulanır; atlananlar raporda remaining. EL8/9'da best=True
@@ -112,7 +112,7 @@
 # Servisler açılışta geç kalkabilir; bir süre beklenir.
 - name: Sağlık kontrolü
   when:
-    - health_check
+    - health_check | bool
     - update_result is changed or reboot_result is changed
   block:
     - name: Güncelleme öncesi çalışan servisler çalışıyor

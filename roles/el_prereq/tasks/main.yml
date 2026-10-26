@@ -1,0 +1,19 @@
+---
+- name: Hedef desteklenen bir dağıtım mı?
+  ansible.builtin.assert:
+    that: ansible_facts.distribution_major_version in supported_platforms[ansible_facts.distribution] | default([])
+    fail_msg: >-
+      Bu rol yalnızca {% for name, versions in supported_platforms.items() %}{{ name }} {{ versions | join('/') }}{{ '' if loop.last else ', ' }}{% endfor %} içindir
+      ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }} bulundu).
+    quiet: true
+
+# Her bileşen kendi dosyasında ve kendi manage_* anahtarıyla. Yeni bir
+# bileşen için: tasks/<ad>.yml, defaults'ta manage_<ad> ve parametreleri,
+# meta/argument_specs.yml'de aynıları, buraya bir import.
+- name: NTP
+  ansible.builtin.import_tasks: ntp.yml
+  when: manage_ntp | bool
+
+- name: rsyslog
+  ansible.builtin.import_tasks: rsyslog.yml
+  when: manage_rsyslog | bool

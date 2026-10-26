@@ -1,0 +1,5 @@
+---
+# Denenmiş dağıtımlar ve ana sürümleri (ansible_facts.distribution).
+supported_platforms:
+  OracleLinux: ["8"]
+  Rocky: ["9"]

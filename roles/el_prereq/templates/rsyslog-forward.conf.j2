@@ -1,0 +1,25 @@
+# Gaia'nın yazdığı log iletimi ({{ gaia_contract }}); elle değiştirilirse
+# bir sonraki run geri alır.
+{% if rsyslog_tls | bool %}
+global(DefaultNetstreamDriverCAFile="{{ rsyslog_tls_ca_file }}")
+{% endif %}
+
+# Sunucuya ulaşılamazken loglar diskte biriktirilir, bağlantı gelince
+# gönderilir. omfwd'nin varsayılan formatı zaman damgasında saat dilimi
+# taşımaz; alıcı saati kendi diliminde yorumlar ve olaylar kayar.
+*.* action(type="omfwd"
+           target="{{ rsyslog_remote_host }}"
+           port="{{ rsyslog_remote_port }}"
+           protocol="{{ rsyslog_remote_protocol }}"
+           template="{{ {'forward': 'RSYSLOG_ForwardFormat', 'rfc5424': 'RSYSLOG_SyslogProtocol23Format'}[rsyslog_format] }}"
+{% if rsyslog_tls | bool %}
+           StreamDriver="gtls"
+           StreamDriverMode="1"
+           StreamDriverAuthMode="x509/name"
+           StreamDriverPermittedPeers="{{ rsyslog_remote_host }}"
+{% endif %}
+           queue.type="LinkedList"
+           queue.filename="gaia_forward"
+           queue.maxDiskSpace="{{ rsyslog_queue_max_disk_space }}"
+           queue.saveOnShutdown="on"
+           action.resumeRetryCount="-1")
