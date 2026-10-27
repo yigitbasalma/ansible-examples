@@ -1,0 +1,108 @@
+---
+# el_prereq rolünün iç repo bileşeni için örnek (playbooks/prereq.yml).
+#
+# Nereye konur:
+#   - Inventory'de group_vars olarak, ör. group_vars/all/internal_repos.yml.
+#     Aşağıdaki seçim sunucunun dağıtımına göre yapıldığı için Rocky 9 ve
+#     Oracle Linux 8 sunucuları aynı dosyayı kullanabilir.
+#   - Ya da AWX job template'inin "Extra variables" alanına bu YAML olduğu gibi
+#     yapıştırılır. Elle denemek için:
+#       ansible-playbook -i <inventory> playbooks/prereq.yml -e @examples/internal_repos.yml --check
+#   Liste survey'e uygun değildir.
+#
+# Rol ne yapar (manage_repos: true iken):
+#   - internal_repos'taki repoları /etc/yum.repos.d/gaia-internal.repo'ya yazar.
+#   - Önce bu repoları geçici bir dizinde dener; biri erişilemezse sunucunun
+#     repo ayarına hiç dokunmadan durur.
+#   - Sunucudaki diğer repo dosyalarını bir kez /etc/yum.repos.d.gaia-backup
+#     dizinine yedekler; dosyalar yerinde kalır ama içlerindeki bütün repolar
+#     kapatılır (enabled=0). rocky-repos gibi paketler güncellense de kapalı
+#     kalırlar.
+#   - manage_repos sonradan false yapılırsa eski repolar geri açılmaz;
+#     gerekirse yedekten elle dönülür.
+#
+# Dikkat:
+#   - Diğer bütün repolar kapandığı için sunucunun ihtiyaç duyduğu her repo
+#     burada olmalı. Oracle Linux 8 cloud imajları UEK çekirdeğini
+#     ol8_UEKR7'den alır; onun aynası eklenmezse çekirdek güncellenemez.
+#   - Zabbix gibi ajan repoları da buraya yazılır ve o rollerdeki repo adresi
+#     boş bırakılır (zabbix_repo_url: ""); yoksa iki rol birbirinin reposunu
+#     açıp kapatır.
+#   - EL8 AppStream'in aynası modül bilgisini (modules.yaml) de içermeli;
+#     Nexus'un yum proxy reposu bunu olduğu gibi taşır.
+#   - İnternetsiz ortamda imza anahtarı internetten alınamaz: dağıtımın kendi
+#     anahtarları sunucuda zaten vardır (file://), diğerleri Nexus'taki bir raw
+#     repodan verilir.
+#
+# Alanlar (name ve baseurl zorunlu, diğerlerinin varsayılanı parantez içinde):
+#   name         Repo kimliği; harf, rakam ve _ . : - içerebilir. Sunucudaki
+#                varsayılan repolarla aynı adı (baseos, ol8_appstream...)
+#                kullanmayın; ayrı bir önek (internal-) karışıklığı önler.
+#   description  Açıklama ("" ise name).
+#   baseurl      Repo adresi. $basearch (x86_64, aarch64) ve $releasever
+#                kullanılabilir.
+#   gpgcheck     Paket imzaları doğrulansın (true). Yalnızca imzasız iç
+#                paketler için false yapılır.
+#   gpgkey       İmza anahtarının adresi ya da file:// yolu (""). Boşsa
+#                anahtar sunucuda önceden içe aktarılmış olmalı.
+#   sslverify    Repo sunucusunun TLS sertifikası doğrulansın (true). Nexus'un
+#                sertifikası iç CA'dan ise CA sunucuya eklenir, bu kapatılmaz.
+#   priority     dnf önceliği; küçük olan önce (0 = yazılmaz). Aynı paket
+#                birden çok repoda varsa (ör. Zabbix ve EPEL) kullanılır.
+
+manage_repos: true
+
+# Dağıtım ve ana sürüme göre repolar. Anahtar ansible_facts'teki
+# "<distribution><major>" değeridir: Rocky9, OracleLinux8.
+internal_repos_by_os:
+  Rocky9:
+    - name: internal-baseos
+      description: Rocky 9 BaseOS (Nexus)
+      baseurl: https://nexus.example.local/repository/rocky-proxy/9/BaseOS/$basearch/os/
+      gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+    - name: internal-appstream
+      description: Rocky 9 AppStream (Nexus)
+      baseurl: https://nexus.example.local/repository/rocky-proxy/9/AppStream/$basearch/os/
+      gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+    - name: internal-extras
+      description: Rocky 9 Extras (Nexus)
+      baseurl: https://nexus.example.local/repository/rocky-proxy/9/extras/$basearch/os/
+      gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-9
+    # Zabbix ajanı (el_zabbix'te zabbix_repo_url: "" verilir). EPEL de
+    # eklenirse Zabbix paketleri bu repodan gelsin diye öncelik verilir.
+    - name: internal-zabbix
+      description: Zabbix 7.0 (Nexus)
+      baseurl: https://nexus.example.local/repository/zabbix-proxy/zabbix/7.0/rhel/9/$basearch/
+      gpgkey: https://nexus.example.local/repository/raw/keys/RPM-GPG-KEY-ZABBIX-B5333005
+      priority: 1
+
+  OracleLinux8:
+    - name: internal-ol8-baseos
+      description: Oracle Linux 8 BaseOS (Nexus)
+      baseurl: https://nexus.example.local/repository/oracle-proxy/repo/OracleLinux/OL8/baseos/latest/$basearch/
+      gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+    - name: internal-ol8-appstream
+      description: Oracle Linux 8 AppStream (Nexus)
+      baseurl: https://nexus.example.local/repository/oracle-proxy/repo/OracleLinux/OL8/appstream/$basearch/
+      gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+    # UEK çekirdeği; OL8 cloud imajları bunu kullanır.
+    - name: internal-ol8-uekr7
+      description: Oracle Linux 8 UEK R7 (Nexus)
+      baseurl: https://nexus.example.local/repository/oracle-proxy/repo/OracleLinux/OL8/UEKR7/$basearch/
+      gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+    - name: internal-zabbix
+      description: Zabbix 7.0 (Nexus)
+      baseurl: https://nexus.example.local/repository/zabbix-proxy/zabbix/7.0/rhel/8/$basearch/
+      gpgkey: https://nexus.example.local/repository/raw/keys/RPM-GPG-KEY-ZABBIX-B5333005
+      priority: 1
+    # Şirket içi imzasız paketler (ör. kendi derlenen araçlar).
+    - name: internal-local
+      description: Şirket içi paketler (imzasız)
+      baseurl: https://nexus.example.local/repository/local-el8/
+      gpgcheck: false
+
+# Rolün okuduğu değişken: sunucunun dağıtımına göre yukarıdan seçilir.
+# Listede olmayan bir dağıtımda boş kalır ve rol, diğer repoları kapatmadan
+# durur.
+internal_repos: >-
+  {{ internal_repos_by_os[ansible_facts.distribution ~ ansible_facts.distribution_major_version] | default([]) }}

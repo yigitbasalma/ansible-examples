@@ -1,0 +1,123 @@
+---
+# SSH portunu cloud-init ayarlar; burada sshd'nin o an dinlediği port(lar)
+# kullanılır. ssh_allowed_ips doluysa port yalnızca bu adreslere açılır,
+# boşsa herkese açık kalır. firewalld yoksa ya da çalışmıyorsa bilgi verilip
+# geçilir.
+- name: firewalld çalışıyor mu?
+  ansible.builtin.command: firewall-cmd --state
+  register: ssh_firewalld
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: firewalld kullanılamıyor
+  ansible.builtin.debug:
+    msg: >-
+      firewalld {{ 'kurulu değil' if ssh_firewalld.rc | default(2) == 2 else 'çalışmıyor' }}; SSH erişimi IP ile
+      kısıtlanmadı{{ (' (ssh_allowed_ips: ' ~ ssh_allowed_ips | join(', ') ~ ')') if ssh_allowed_ips else '' }}.
+  when: ssh_firewalld.stdout | default('') != 'running'
+
+- name: SSH erişimi (firewalld)
+  when: ssh_firewalld.stdout | default('') == 'running'
+  block:
+    - name: sshd'nin dinlediği portlar
+      ansible.builtin.command: sshd -T
+      register: ssh_sshd_config
+      changed_when: false
+      check_mode: false
+
+    # firewall'un gördüğü kaynak adres (bastion varsa onunki). become
+    # olmadan okunur; sudo SSH_CLIENT'ı taşımaz.
+    - name: Ansible'ın bağlandığı adres
+      ansible.builtin.command: printenv SSH_CLIENT
+      become: false
+      register: ssh_client
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: İzinli adresler ve istenen kurallar
+      ansible.builtin.command:
+        argv: >-
+          {{ [ansible_facts.python.executable, '-c', ssh_access_script,
+              (ssh_client.stdout | default('')).split() | first | default(''), ssh_ports | join(',')]
+             + ssh_allowed_ips | map('string') | list }}
+      register: ssh_access_check
+      changed_when: false
+      check_mode: false
+      vars:
+        ssh_ports: "{{ ssh_sshd_config.stdout_lines | select('match', '^port ') | map('split') | map(attribute=1) | unique }}"
+
+    - name: SSH erişim planı
+      ansible.builtin.set_fact:
+        ssh_access: "{{ ssh_access_check.stdout | from_json }}"
+
+    - name: İzinli adresler geçerli ve Ansible'ın adresi içinde
+      ansible.builtin.assert:
+        that:
+          - ssh_access.invalid | length == 0
+          - ssh_access.controller_allowed is not false
+        fail_msg: >-
+          {{ ('Geçersiz adresler: ' ~ ssh_access.invalid | join(', ') ~ '. ') if ssh_access.invalid else '' }}{{
+          ('Ansible ' ~ ssh_access.controller ~ ' adresinden bağlanıyor ve bu adres ssh_allowed_ips içinde değil; '
+           ~ 'kural uygulanırsa sunucuya erişilemez.') if ssh_access.controller_allowed is false else '' }}
+        quiet: true
+
+    - name: Varsayılan firewalld bölgesi
+      ansible.builtin.command: firewall-cmd --get-default-zone
+      register: ssh_zone
+      changed_when: false
+      check_mode: false
+
+    - name: Bölgenin kalıcı ayarı
+      ansible.builtin.command:
+        argv: [firewall-cmd, --permanent, "--zone={{ ssh_zone.stdout }}", "{{ item }}"]
+      loop: [--list-rich-rules, --list-services, --list-ports]
+      register: ssh_zone_config
+      changed_when: false
+      check_mode: false
+
+    # Rol yalnızca kendi biçimindeki kuralları (kaynak adres + SSH portu +
+    # accept) yönetir; listeden çıkan adresin kuralı silinir. Kısıtlıysa
+    # genel erişim (ssh servisi, port) kaldırılır; değilse port herkese açık
+    # olmalı. Önce izin verilir, sonra kaldırılır.
+    - name: firewalld kalıcı ayarı
+      ansible.builtin.command:
+        argv: [firewall-cmd, --permanent, "--zone={{ ssh_zone.stdout }}", "{{ item }}"]
+      loop: >-
+        {{ rules_add | map('regex_replace', '^', '--add-rich-rule=') | list
+           + open_add
+           + rules_remove | map('regex_replace', '^', '--remove-rich-rule=') | list
+           + open_remove }}
+      register: ssh_firewall_changes
+      changed_when: true
+      vars:
+        rules_current: "{{ ssh_zone_config.results[0].stdout_lines }}"
+        services: "{{ ssh_zone_config.results[1].stdout.split() }}"
+        ports: "{{ ssh_zone_config.results[2].stdout.split() }}"
+        port_args: "{{ ssh_access.ports | reject('equalto', '22') | map('regex_replace', '$', '/tcp') | list }}"
+        rule_pattern: >-
+          ^rule family="ipv[46]" source address="[^"]+" port port="({{ ssh_access.ports | join('|') }})" protocol="tcp" accept$
+        rules_add: "{{ ssh_access.rules | difference(rules_current) }}"
+        rules_remove: "{{ rules_current | select('match', rule_pattern) | difference(ssh_access.rules) }}"
+        open_add: >-
+          {{ [] if ssh_access.rules else
+             port_args | reject('in', ports) | map('regex_replace', '^', '--add-port=') | list
+             + (['--add-service=ssh'] if '22' in ssh_access.ports and 'ssh' not in services else []) }}
+        open_remove: >-
+          {{ [] if not ssh_access.rules else
+             (['--remove-service=ssh'] if 'ssh' in services else [])
+             + ssh_access.ports | map('regex_replace', '$', '/tcp') | select('in', ports)
+               | map('regex_replace', '^', '--remove-port=') | list }}
+
+    # Kalıcı ayar tek seferde uygulanır; açık oturumlar kopmaz.
+    - name: firewalld yeniden yüklensin
+      ansible.builtin.command: firewall-cmd --reload
+      changed_when: true
+      when: ssh_firewall_changes is changed
+
+    - name: SSH erişimi
+      ansible.builtin.debug:
+        msg: >-
+          SSH port(ları) {{ ssh_access.ports | join(', ') }} ({{ ssh_zone.stdout }} bölgesi):
+          {{ ('yalnızca ' ~ ssh_access.networks | join(', ')) if ssh_access.rules else 'herkese açık' }}.

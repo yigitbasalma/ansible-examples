@@ -5,11 +5,24 @@
 # ansible.posix.selinux EL8'de çalışmaz (ansible-core 2.21 Python >= 3.9
 # ister, libselinux bağlaması yalnızca platform-python 3.6 için var);
 # config, grubby ve setenforce doğrudan kullanılır.
+
+# rpm repolara gitmez; dnf yalnızca eksik paket varsa çalışır. Böylece
+# erişilemeyen repoları olan bir sunucuda (iç repolar henüz tanımlanmadan)
+# da adım düşmez.
+- name: SELinux araçları kurulu mu?
+  ansible.builtin.command:
+    argv: "{{ ['rpm', '-q'] + selinux_required_packages }}"
+  register: selinux_rpm
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: SELinux araçları
   ansible.builtin.dnf:
-    name: "{{ ['libselinux-utils', 'grubby'] + ([] if selinux_state == 'disabled' else ['selinux-policy-targeted']) }}"
+    name: "{{ selinux_rpm.stdout_lines | select('search', 'not installed') | map('split') | map(attribute=1) | list }}"
     state: present
   register: selinux_packages
+  when: selinux_rpm.rc != 0
 
 # Check mode'da paketler henüz kurulmadıysa getenforce ve grubby yoktur;
 # sapma zaten paket task'ında görünür.

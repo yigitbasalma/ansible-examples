@@ -14,6 +14,16 @@
   ansible.builtin.import_tasks: selinux.yml
   when: manage_selinux | bool
 
+# dnf kullanan bileşenlerden önce: internetsiz ortamda varsayılan repolar
+# erişilemezdir.
+- name: İç repolar
+  ansible.builtin.import_tasks: repos.yml
+  when: manage_repos | bool
+
+- name: Guest agent
+  ansible.builtin.import_tasks: guest_agent.yml
+  when: manage_guest_agent | bool
+
 - name: NTP
   ansible.builtin.import_tasks: ntp.yml
   when: manage_ntp | bool
@@ -21,3 +31,7 @@
 - name: rsyslog
   ansible.builtin.import_tasks: rsyslog.yml
   when: manage_rsyslog | bool
+
+- name: SSH erişimi
+  ansible.builtin.import_tasks: ssh_access.yml
+  when: manage_ssh_access | bool

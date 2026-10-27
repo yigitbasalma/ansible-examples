@@ -2,6 +2,12 @@
 manage_selinux: true
 selinux_state: disabled
 
+manage_repos: false
+internal_repos: []
+
+manage_guest_agent: true
+guest_agent: auto
+
 manage_ntp: true
 ntp_servers: []
 ntp_pool: pool.ntp.org
@@ -17,3 +23,6 @@ rsyslog_format: forward
 rsyslog_tls: false
 rsyslog_tls_ca_file: /etc/pki/tls/certs/rsyslog-ca.pem
 rsyslog_queue_max_disk_space: 1g
+
+manage_ssh_access: true
+ssh_allowed_ips: []

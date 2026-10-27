@@ -1,11 +1,14 @@
 ---
-# Makine hazırlığı (SELinux, NTP, rsyslog). AWX job template'inde
-# Playbook: playbooks/prereq.yml
+# Makine hazırlığı (SELinux, iç repolar, guest agent, NTP, rsyslog, SSH
+# erişimi). AWX job template'inde Playbook: playbooks/prereq.yml
 #
 # Rolün parametreleri (roles/el_prereq/meta/argument_specs.yml) extra vars
 # ya da survey ile verilir: ntp_servers, timezone, rsyslog_remote_host,
-# rsyslog_remote_port, rsyslog_tls, selinux_state ... Bileşenler manage_selinux,
-# manage_ntp ve manage_rsyslog ile tek tek kapatılabilir.
+# rsyslog_remote_port, rsyslog_tls, selinux_state, guest_agent,
+# ssh_allowed_ips ... internal_repos bir liste olduğu için group_vars ya da
+# extra vars'ta YAML olarak verilir; açıklamalı örnek:
+# examples/internal_repos.yml. Bileşenler manage_* anahtarlarıyla tek tek
+# açılıp kapatılır.
 # Hedef host'lar inventory ve job template'in "Limit" alanıyla seçilir.
 - name: Makine hazırlığı
   hosts: all

@@ -61,3 +61,7 @@ critical_paths:
   - { path: /etc/cron.weekly, mode: "0700", state: directory }
   - { path: /etc/cron.monthly, mode: "0700", state: directory }
   - { path: /etc/cron.d, mode: "0700", state: directory }
+
+# SELinux adımının ihtiyaç duyduğu paketler; politika yalnızca açıkken.
+selinux_required_packages: >-
+  {{ ['libselinux-utils', 'grubby'] + ([] if selinux_state == 'disabled' else ['selinux-policy-targeted']) }}

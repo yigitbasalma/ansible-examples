@@ -1,0 +1,83 @@
+---
+- name: Guest agent bulunamadı
+  ansible.builtin.debug:
+    msg: >-
+      Sanallaştırma algılanamadı (virtualization_type: {{ ansible_facts.virtualization_type | default('-') }},
+      role: {{ ansible_facts.virtualization_role | default('-') }}); guest agent kurulmadı. Gerekirse guest_agent
+      vmware ya da proxmox verilir.
+  when:
+    - guest_agent == 'auto'
+    - guest_agent_effective == 'none'
+
+# open-vm-tools, VMware Tools'un açık kaynak karşılığıdır; VMware de bunu
+# önerir.
+- name: VMware (open-vm-tools)
+  when: guest_agent_effective == 'vmware'
+  block:
+    - name: open-vm-tools
+      ansible.builtin.dnf:
+        name: open-vm-tools
+        state: present
+      register: guest_agent_package
+
+    - name: vmtoolsd açılışa bağlansın
+      ansible.builtin.systemd_service:
+        name: vmtoolsd
+        enabled: true
+      when: not (ansible_check_mode and guest_agent_package is changed)
+
+    # vmtoolsd yalnızca VMware'de başlar (ConditionVirtualization); başka
+    # yerde başlatmak her run'da boşuna "changed" olur.
+    - name: vmtoolsd çalışsın
+      ansible.builtin.systemd_service:
+        name: vmtoolsd
+        state: started
+      when:
+        - ansible_facts.virtualization_type | default('') | lower == 'vmware'
+        - not (ansible_check_mode and guest_agent_package is changed)
+
+    - name: VMware değil
+      ansible.builtin.debug:
+        msg: >-
+          guest_agent vmware seçili ama sunucu VMware üzerinde değil (virtualization_type:
+          {{ ansible_facts.virtualization_type | default('-') }}); open-vm-tools kuruldu, vmtoolsd yalnızca VMware'de
+          çalışır.
+      when: ansible_facts.virtualization_type | default('') | lower != 'vmware'
+
+# Proxmox'ta ajan, VM'de "QEMU Guest Agent" seçeneği açıkken eklenen sanal
+# seri aygıtla konuşur. Aygıt yoksa servis başlayamaz; açılışa bağlıdır,
+# aygıt gelince (seçenek açılıp VM yeniden başlatılınca) kendiliğinden başlar.
+- name: Proxmox (qemu-guest-agent)
+  when: guest_agent_effective == 'proxmox'
+  block:
+    - name: qemu-guest-agent
+      ansible.builtin.dnf:
+        name: qemu-guest-agent
+        state: present
+      register: guest_agent_package
+
+    - name: Guest agent aygıtı
+      ansible.builtin.stat:
+        path: /dev/virtio-ports/org.qemu.guest_agent.0
+      register: guest_agent_device
+
+    - name: qemu-guest-agent açılışa bağlansın
+      ansible.builtin.systemd_service:
+        name: qemu-guest-agent
+        enabled: true
+      when: not (ansible_check_mode and guest_agent_package is changed)
+
+    - name: qemu-guest-agent çalışsın
+      ansible.builtin.systemd_service:
+        name: qemu-guest-agent
+        state: started
+      when:
+        - guest_agent_device.stat.exists
+        - not (ansible_check_mode and guest_agent_package is changed)
+
+    - name: Guest agent aygıtı yok
+      ansible.builtin.debug:
+        msg: >-
+          qemu-guest-agent kuruldu ama VM'de guest agent aygıtı yok; Proxmox'ta VM > Options > QEMU Guest Agent
+          açılıp VM yeniden başlatılınca servis kendiliğinden başlar.
+      when: not guest_agent_device.stat.exists

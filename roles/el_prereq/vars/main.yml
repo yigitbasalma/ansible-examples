@@ -17,3 +17,53 @@ rsyslog_selinux_allowed_port_types:
 
 # Port aralıklarını kaplayan, belirli bir servise ait olmayan SELinux tipleri.
 selinux_generic_port_types: [port_t, unreserved_port_t, reserved_port_t, hi_reserved_port_t, ephemeral_port_t]
+
+# SELinux adımının ihtiyaç duyduğu paketler; politika yalnızca açıkken.
+selinux_required_packages: >-
+  {{ ['libselinux-utils', 'grubby'] + ([] if selinux_state == 'disabled' else ['selinux-policy-targeted']) }}
+
+# İç repolar: yedek dizini ve rolün yazdığı dosya.
+repos_backup_dir: /etc/yum.repos.d.gaia-backup
+repos_file: /etc/yum.repos.d/gaia-internal.repo
+
+# argument_specs'teki alan varsayılanları değişkene uygulanmaz; her repo
+# kaydı bunlarla tamamlanır (kayıttaki değer kazanır).
+internal_repo_defaults:
+  description: ""
+  baseurl: ""
+  gpgcheck: true
+  gpgkey: ""
+  sslverify: true
+  priority: 0
+internal_repos_effective: "{{ [internal_repo_defaults] | product(internal_repos) | map('combine') | list }}"
+
+# guest_agent auto ise sanallaştırmaya göre seçilir: VMware'de open-vm-tools,
+# KVM'de (Proxmox) qemu-guest-agent; fiziksel ya da tanınmayan ortamda yok.
+guest_agent_effective: >-
+  {{ guest_agent if guest_agent != 'auto'
+     else 'none' if ansible_facts.virtualization_role | default('') != 'guest'
+     else 'vmware' if ansible_facts.virtualization_type | default('') | lower == 'vmware'
+     else 'proxmox' if ansible_facts.virtualization_type | default('') in ['kvm', 'qemu']
+     else 'none' }}
+
+# Adresleri doğrular ve normalleştirir (10.0.0.1 -> 10.0.0.1/32), Ansible'ın
+# bağlandığı adresin izinli olup olmadığına bakar ve istenen firewalld
+# kurallarını üretir. Argümanlar: bağlanan adres, portlar (virgüllü),
+# izinli adresler.
+ssh_access_script: |
+  import ipaddress, json, sys
+  controller, ports, entries = sys.argv[1], [p for p in sys.argv[2].split(",") if p], sys.argv[3:]
+  nets, invalid = [], []
+  for e in entries:
+      try:
+          nets.append(ipaddress.ip_network(e.strip(), strict=False))
+      except ValueError:
+          invalid.append(e)
+  allowed = None
+  if nets and controller:
+      ip = ipaddress.ip_address(controller)
+      allowed = any(ip in n for n in nets if n.version == ip.version)
+  rules = ['rule family="ipv%d" source address="%s" port port="%s" protocol="tcp" accept' % (n.version, n, p)
+           for n in nets for p in ports]
+  print(json.dumps({"invalid": invalid, "networks": [str(n) for n in nets], "ports": ports,
+                    "controller": controller, "controller_allowed": allowed, "rules": rules}))

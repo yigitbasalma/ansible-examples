@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuyu kullanıma hazırlar (SELinux, NTP, rsyslog)
+    short_description: Oracle Linux 8 ve Rocky Linux 9 sunucuyu kullanıma hazırlar (SELinux, repolar, guest agent, NTP, rsyslog, SSH erişimi)
     description:
       - Makine hazırlığının bileşenleri; her biri kendi manage_* anahtarıyla açılıp kapanır.
       - Senkronizasyon durumu AWX'te job artifact'ı (prereq_report) olarak da görünür.
@@ -18,6 +18,60 @@ argument_specs:
           SELinux durumu. el_hardening aynı parametreyi kullanır; iki role aynı değer verilmeli. disabled
           /etc/selinux/config ve selinux=0 çekirdek parametresiyle kapatır; yeniden başlatmaya kadar permissive olur.
           Kapalıdan açılırken ilk açılışta dosya sistemi yeniden etiketlenir.
+      manage_repos:
+        type: bool
+        default: false
+        description: >-
+          İç repolar kullanılsın. Açıkken internal_repos'taki repolar /etc/yum.repos.d/gaia-internal.repo'ya yazılır;
+          sunucudaki diğer repo dosyaları bir kez /etc/yum.repos.d.gaia-backup'a yedeklenir ve içlerindeki repolar
+          kapatılır (enabled=0). Kapatmak eski repoları geri açmaz; gerekirse yedekten elle dönülür.
+      internal_repos:
+        type: list
+        elements: dict
+        default: []
+        description: >-
+          İç repolar. Açıkken diğer bütün repolar kapandığı için zabbix gibi ek repolar da buraya yazılır (o
+          rollerdeki repo adresi boş bırakılır).
+        options:
+          name:
+            type: str
+            required: true
+            description: "Repo kimliği (ör. internal-baseos). Harf, rakam ve _ . : - içerebilir."
+          description:
+            type: str
+            default: ""
+            description: Açıklama. Boşsa name.
+          baseurl:
+            type: str
+            required: true
+            description: Repo adresi (ör. https://nexus.example.local/repository/rocky9-baseos/). $basearch kullanılabilir.
+          gpgcheck:
+            type: bool
+            default: true
+            description: Paket imzaları doğrulansın.
+          gpgkey:
+            type: str
+            default: ""
+            description: İmza anahtarının adresi ya da file:// yolu. Boşsa anahtar sunucuda önceden içe aktarılmış olmalı.
+          sslverify:
+            type: bool
+            default: true
+            description: Repo sunucusunun TLS sertifikası doğrulansın.
+          priority:
+            type: int
+            default: 0
+            description: dnf önceliği (küçük olan önce); 0 yazılmaz.
+      manage_guest_agent:
+        type: bool
+        default: true
+        description: Hipervizorün guest agent'ı kurulsun.
+      guest_agent:
+        type: str
+        default: auto
+        choices: [auto, vmware, proxmox, none]
+        description: >-
+          auto sanallaştırmaya göre seçer. vmware open-vm-tools (VMware Tools'un açık kaynak karşılığı), proxmox
+          qemu-guest-agent kurar; Proxmox'ta VM > Options > QEMU Guest Agent açık olmalı.
       manage_ntp:
         type: bool
         default: true
@@ -79,3 +133,17 @@ argument_specs:
         type: str
         default: 1g
         description: Log sunucusuna ulaşılamazken loglar diskte bu boyuta kadar biriktirilir (ör. 500m, 2g).
+      manage_ssh_access:
+        type: bool
+        default: true
+        description: >-
+          SSH erişimi firewalld ile yönetilsin. Port değiştirilmez (cloud-init ayarlar); sshd'nin dinlediği port
+          kullanılır. firewalld kurulu değilse ya da çalışmıyorsa bilgi verilip geçilir.
+      ssh_allowed_ips:
+        type: list
+        elements: str
+        default: []
+        description: >-
+          SSH'a izin verilen adresler ya da ağlar (ör. 10.10.0.0/16, 192.168.1.20). Doluysa SSH portu yalnızca bunlara
+          açılır, genel ssh erişimi kaldırılır; boşsa herkese açıktır. Ansible'ın bağlandığı adres listede değilse
+          rol hiçbir şey değiştirmeden durur.

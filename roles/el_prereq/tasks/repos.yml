@@ -1,0 +1,105 @@
+---
+# internal_repos'taki repolar tanımlanır; sunucudaki diğer bütün repolar
+# kapatılır (enabled=0). Dosyalar yerinde kalır: rocky-repos gibi paketler
+# güncellense de rpm düzenlenmiş dosyayı ezmez, repolar kapalı kalır.
+- name: İç repo kayıtları geçerli mi?
+  ansible.builtin.assert:
+    that:
+      - internal_repos_effective | length > 0
+      - internal_repos_effective | map(attribute='name') | unique | length == internal_repos_effective | length
+      - internal_repos_effective | map(attribute='name') | reject('match', '^[A-Za-z0-9_.:-]+$') | list | length == 0
+      - internal_repos_effective | map(attribute='baseurl') | select('equalto', '') | list | length == 0
+    fail_msg: >-
+      manage_repos açıkken internal_repos boş olamaz (diğer repolar kapatılacağı için sunucu paket kuramaz hale
+      gelir); her reponun tekil bir adı (harf, rakam, _ . : -) ve baseurl'ü olmalı.
+    quiet: true
+
+- name: Repo araçları kurulu mu? (dnf config-manager)
+  ansible.builtin.command: rpm -q dnf-plugins-core
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  register: repos_plugins
+
+- name: Repo araçları var
+  ansible.builtin.assert:
+    that: repos_plugins.rc == 0
+    fail_msg: >-
+      dnf-plugins-core kurulu değil; repolar kapatılamaz. Erişilebilir bir repo varken kurulmalı (EL imajlarında
+      normalde kuruludur).
+    quiet: true
+
+# Yeni tanımlar önce geçici bir dizinde denenir: erişilemeyen bir iç repo
+# yazılıp diğerleri kapatılırsa sunucu paket kuramaz hale gelir. Sistemin
+# repo ayarı değişmez (değişiklik sayılmaz), check mode'da da çalışır.
+- name: İç repoların denenmesi
+  block:
+    - name: Deneme dizini
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: .repos
+      register: repos_trial
+      changed_when: false
+      check_mode: false
+
+    - name: Deneme tanımı
+      ansible.builtin.template:
+        src: internal.repo.j2
+        dest: "{{ repos_trial.path }}/gaia-internal.repo"
+        mode: "0644"
+      changed_when: false
+      check_mode: false
+
+    - name: İç repolara erişiliyor mu?
+      ansible.builtin.command:
+        argv: "{{ ['dnf', '-q', 'makecache', '--setopt=reposdir=' ~ repos_trial.path] }}"
+      register: repos_makecache
+      changed_when: false
+      failed_when: false
+      check_mode: false
+  always:
+    - name: Deneme dizini silinsin
+      ansible.builtin.file:
+        path: "{{ repos_trial.path }}"
+        state: absent
+      changed_when: false
+      check_mode: false
+      when: repos_trial.path is defined
+
+- name: İç repolara erişilemedi
+  ansible.builtin.fail:
+    msg: >-
+      İç repolara erişilemedi, sunucunun repo ayarına dokunulmadı:
+      {{ (repos_makecache.stderr | default('') | trim)[-600:] }}
+  when: repos_makecache.rc != 0
+
+# Yalnızca ilk kez: sonraki run'lar özgün halin yedeğini ezmez.
+- name: Mevcut repoların yedeği
+  ansible.builtin.shell: >-
+    mkdir -p {{ repos_backup_dir }} && cp -a /etc/yum.repos.d/. {{ repos_backup_dir }}/
+  args:
+    creates: "{{ repos_backup_dir }}"
+
+- name: İç repolar
+  ansible.builtin.template:
+    src: internal.repo.j2
+    dest: "{{ repos_file }}"
+    mode: "0644"
+  register: repos_internal
+
+# repolist metadata indirmez; erişilemeyen repolar varken de çalışır.
+- name: Açık repolar
+  ansible.builtin.command: dnf repolist --enabled
+  register: repos_enabled
+  changed_when: false
+  check_mode: false
+
+- name: Diğer repolar kapatılsın
+  ansible.builtin.command:
+    argv: "{{ ['dnf', 'config-manager', '--set-disabled'] + repos_to_disable }}"
+  changed_when: true
+  when: repos_to_disable | length > 0
+  vars:
+    repos_to_disable: >-
+      {{ repos_enabled.stdout_lines | reject('match', '^repo id\s') | map('split') | map('first')
+         | difference(internal_repos_effective | map(attribute='name')) }}

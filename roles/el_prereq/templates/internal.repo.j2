@@ -1,0 +1,17 @@
+# Gaia'nın yazdığı iç repolar ({{ gaia_contract }}); elle değiştirilirse
+# bir sonraki run geri alır.
+{% for r in internal_repos_effective %}
+
+[{{ r.name }}]
+name={{ r.description or r.name }}
+baseurl={{ r.baseurl }}
+enabled=1
+gpgcheck={{ 1 if r.gpgcheck | bool else 0 }}
+{% if r.gpgkey %}
+gpgkey={{ r.gpgkey }}
+{% endif %}
+sslverify={{ 1 if r.sslverify | bool else 0 }}
+{% if r.priority %}
+priority={{ r.priority }}
+{% endif %}
+{% endfor %}
